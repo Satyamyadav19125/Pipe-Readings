@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  background: #f1f5f9;
+  color: #0f172a;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html { scroll-behavior: smooth; }
+
+.scrollbar-thin::-webkit-scrollbar { height: 6px; width: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+@media (max-width: 640px) {
+  button, a { min-height: 36px; }
+}
+
+/* Chat background that follows the theme */
+.chat-bg { background: #eef2f6; }
+
+/* ============================ DARK MODE (#10) ============================ */
+/* Applied by adding .dark on <html>. We remap the most-used light utility
+   classes so EVERY page goes dark without editing each component. */
+.dark, .dark body { background: #0b1220; color: #e2e8f0; }
+.dark .chat-bg { background: #0b1220; }
+
+.dark .bg-white { background-color: #1e293b !important; }
+.dark .bg-slate-50, .dark .bg-slate-50\/50 { background-color: #18243a !important; }
+.dark .bg-slate-100 { background-color: #223049 !important; }
+.dark .bg-slate-200 { background-color: #2b3a55 !important; }
+.dark .bg-gray-100 { background-color: #223049 !important; }
+.dark .bg-gray-200 { background-color: #2b3a55 !important; }
+
+.dark .text-slate-900, .dark .text-gray-800, .dark .text-slate-800 { color: #e2e8f0 !important; }
+.dark .text-slate-700, .dark .text-gray-700 { color: #cbd5e1 !important; }
+.dark .text-slate-600, .dark .text-gray-600, .dark .text-gray-500 { color: #94a3b8 !important; }
+.dark .text-slate-500 { color: #94a3b8 !important; }
+.dark .text-slate-400, .dark .text-gray-400 { color: #64748b !important; }
+.dark .text-brand-900 { color: #bae6fd !important; }
+.dark .text-field-900 { color: #bbf7d0 !important; }
+
+.dark .border-slate-100, .dark .border-slate-200, .dark .border-slate-300,
+.dark .border-gray-200, .dark .border-gray-300 { border-color: #334155 !important; }
+
+.dark input, .dark select, .dark textarea {
+  background-color: #0f1a2e !important; color: #e2e8f0 !important; border-color: #334155 !important;
+}
+.dark input::placeholder, .dark textarea::placeholder { color: #64748b; }
+
+/* tinted cards */
+.dark .bg-brand-50 { background-color: #102a43 !important; }
+.dark .bg-field-50 { background-color: #0f2a1d !important; }
+.dark .bg-amber-50 { background-color: #2d2410 !important; }
+.dark .bg-red-50 { background-color: #341a1a !important; }
+.dark .bg-rose-50 { background-color: #341a22 !important; }
+.dark .bg-emerald-50 { background-color: #0f2a20 !important; }
+.dark .bg-sky-50 { background-color: #0f2333 !important; }
+.dark .bg-violet-50 { background-color: #221a33 !important; }
+.dark .bg-blue-50 { background-color: #102036 !important; }
+.dark .bg-brand-100 { background-color: #14365a !important; }
+.dark .bg-field-100 { background-color: #14361f !important; }
+.dark .bg-emerald-100 { background-color: #123b2a !important; }
+.dark .bg-amber-100 { background-color: #3a2f12 !important; }
+.dark .bg-red-100 { background-color: #421f1f !important; }
+.dark .bg-rose-100 { background-color: #421f2c !important; }
+
+.dark .text-amber-900, .dark .text-amber-800 { color: #fcd34d !important; }
+.dark .text-red-900, .dark .text-red-800, .dark .text-red-700 { color: #fca5a5 !important; }
+.dark .text-rose-900, .dark .text-rose-800 { color: #fda4af !important; }
+.dark .text-emerald-900, .dark .text-emerald-800 { color: #6ee7b7 !important; }
+.dark .text-blue-900 { color: #93c5fd !important; }
+.dark .text-sky-900 { color: #7dd3fc !important; }
+.dark .text-violet-900 { color: #c4b5fd !important; }
+.dark .text-brand-700, .dark .text-brand-600 { color: #38bdf8 !important; }
+.dark .text-field-700, .dark .text-field-600 { color: #4ade80 !important; }
+
+/* light gradients become flat dark panels */
+.dark .from-brand-50, .dark .from-slate-50, .dark .from-field-50 { --tw-gradient-from: #18243a !important; }
+.dark .to-field-50, .dark .to-brand-50 { --tw-gradient-to: #102036 !important; }
+
+.dark .shadow, .dark .shadow-sm, .dark .shadow-lg { --tw-shadow-color: rgba(0,0,0,.6); }
+
+.dark .hover\:bg-slate-50:hover, .dark .hover\:bg-slate-100:hover,
+.dark .hover\:bg-gray-200:hover { background-color: #2b3a55 !important; }

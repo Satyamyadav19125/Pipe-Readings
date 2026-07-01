@@ -1,0 +1,16 @@
+{
+  "name": "Water Meter Dashboard",
+  "short_name": "WaterMeter",
+  "description": "Digital Village Project — twice-weekly water meter reading tracker",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0ea5e9",
+  "theme_color": "#0c4a6e",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/apple-icon", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "/apple-icon", "sizes": "180x180", "type": "image/png", "purpose": "maskable" }
+  ]
+}

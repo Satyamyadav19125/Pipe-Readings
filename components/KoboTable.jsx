@@ -1,0 +1,191 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+
+// `mobile: false` columns are hidden on phones so the table fits the screen
+// without left-right scrolling; tap the row number (👁) to see everything.
+const COLUMNS = [
+  { key: 'validation', label: 'Validation', width: 110, mobile: false },
+  { key: 'start', label: 'start', width: 150, mobile: false },
+  { key: 'end', label: 'end', width: 150, mobile: false },
+  { key: 'date', label: 'Date', width: 100, mobile: true },
+  { key: 'time', label: 'time', width: 130, mobile: false },
+  { key: 'gps', label: 'Surveyor location', width: 180, mobile: false },
+  { key: 'surveyor', label: 'Surveyor name', width: 110, mobile: false },
+  { key: 'village', label: 'Village', width: 90, mobile: true },
+  { key: 'meter', label: 'Pipe ID', width: 110, mobile: true },
+  { key: 'reading', label: 'Reading', width: 80, mobile: true },
+];
+const hideCls = (c) => (c.mobile ? '' : 'hidden md:table-cell');
+
+const PAGE_SIZES = [30, 50, 100];
+
+export default function KoboTable({ rows }) {
+  const [search, setSearch] = useState({});
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(30);
+  const [detail, setDetail] = useState(null);
+  const [lightbox, setLightbox] = useState(null);
+
+  const filtered = useMemo(() => {
+    return rows.filter((r) =>
+      COLUMNS.every((c) => {
+        const q = (search[c.key] || '').trim().toLowerCase();
+        if (!q) return true;
+        return String(r[c.key] ?? '').toLowerCase().includes(q);
+      })
+    );
+  }, [rows, search]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageRows = filtered.slice(safePage * pageSize, safePage * pageSize + pageSize);
+
+  function setCol(key, val) { setSearch((s) => ({ ...s, [key]: val })); setPage(0); }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="px-3 py-2.5 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-sm">
+          <span className="font-semibold text-brand-700">{filtered.length.toLocaleString()}</span>
+          <span className="text-slate-500"> results{filtered.length !== rows.length ? ` (of ${rows.length.toLocaleString()})` : ''}</span>
+        </div>
+        {Object.keys(search).some((k) => search[k]) && (
+          <button onClick={() => { setSearch({}); setPage(0); }} className="text-xs text-brand-600 hover:underline">Clear all column searches</button>
+        )}
+      </div>
+
+      <div className="overflow-auto scrollbar-thin max-h-[65vh] overscroll-contain">
+        <table className="text-sm border-collapse w-full md:min-w-max">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-slate-50 border-b-2 border-slate-200">
+              <th className="sticky left-0 bg-slate-50 px-2 py-2 text-left text-xs font-semibold text-slate-600 w-12">#</th>
+              {COLUMNS.map((c) => (
+                <th key={c.key} className={`px-2 md:px-3 py-2 text-left text-xs font-semibold text-slate-600 align-top bg-slate-50 ${hideCls(c)}`} style={{ minWidth: c.width }}>
+                  <div className="flex items-center gap-1 mb-1">{c.label}</div>
+                  <input
+                    value={search[c.key] || ''}
+                    onChange={(e) => setCol(c.key, e.target.value)}
+                    placeholder="Search"
+                    className="w-full px-2 py-1 text-xs font-normal border border-slate-300 rounded bg-white"
+                  />
+                </th>
+              ))}
+              <th className="px-2 md:px-3 py-2 text-left text-xs font-semibold text-slate-600 bg-slate-50">📷</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {pageRows.length === 0 ? (
+              <tr><td colSpan={COLUMNS.length + 2} className="px-3 py-8 text-center text-slate-400">No matching submissions</td></tr>
+            ) : pageRows.map((r, i) => (
+              <tr key={r.id} className="hover:bg-brand-50/40">
+                <td className="sticky left-0 bg-white px-2 py-2 text-slate-400 text-xs">
+                  <button onClick={() => setDetail(r)} className="text-brand-600 hover:underline" title="View full submission">
+                    {safePage * pageSize + i + 1} 👁
+                  </button>
+                </td>
+                <td className="px-2 md:px-3 py-2 hidden md:table-cell">
+                  {r.validation
+                    ? <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">{r.validation}</span>
+                    : <span className="text-slate-300">–</span>}
+                </td>
+                <td className="px-2 md:px-3 py-2 text-xs text-slate-600 whitespace-nowrap hidden md:table-cell">{r.start}</td>
+                <td className="px-2 md:px-3 py-2 text-xs text-slate-600 whitespace-nowrap hidden md:table-cell">{r.end}</td>
+                <td className="px-2 md:px-3 py-2 whitespace-nowrap text-xs md:text-sm">{r.date}</td>
+                <td className="px-2 md:px-3 py-2 text-xs whitespace-nowrap hidden md:table-cell">{r.time}</td>
+                <td className="px-2 md:px-3 py-2 text-xs font-mono text-slate-500 whitespace-nowrap hidden md:table-cell">{r.gps}</td>
+                <td className="px-2 md:px-3 py-2 whitespace-nowrap hidden md:table-cell">{r.surveyor}</td>
+                <td className="px-2 md:px-3 py-2 whitespace-nowrap text-xs md:text-sm">{r.village === 'Unknown' ? <span className="text-slate-300">–</span> : r.village}</td>
+                <td className="px-2 md:px-3 py-2 font-mono text-xs whitespace-nowrap">{r.meter}</td>
+                <td className="px-2 md:px-3 py-2 font-semibold tabular-nums text-xs md:text-sm">{r.reading}</td>
+                <td className="px-2 md:px-3 py-2">
+                  {r.photo
+                    ? <button onClick={() => setLightbox(r.photo)} className="text-brand-600 text-xs hover:underline">📷 view</button>
+                    : <span className="text-slate-300 text-xs">–</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination bar (Kobo style) */}
+      <div className="px-3 py-2.5 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap text-sm">
+        <div className="flex items-center gap-2">
+          <button onClick={() => setPage(0)} disabled={safePage === 0} className="px-2 py-1 rounded border border-slate-300 disabled:opacity-40 text-xs">« First</button>
+          <button onClick={() => setPage(safePage - 1)} disabled={safePage === 0} className="px-2 py-1 rounded border border-slate-300 disabled:opacity-40 text-xs">‹ Prev</button>
+          <span className="text-slate-600 text-xs px-1">Page {safePage + 1} of {pageCount}</span>
+          <button onClick={() => setPage(safePage + 1)} disabled={safePage >= pageCount - 1} className="px-2 py-1 rounded border border-slate-300 disabled:opacity-40 text-xs">Next ›</button>
+          <button onClick={() => setPage(pageCount - 1)} disabled={safePage >= pageCount - 1} className="px-2 py-1 rounded border border-slate-300 disabled:opacity-40 text-xs">Last »</button>
+        </div>
+        <label className="flex items-center gap-1.5 text-xs text-slate-500">
+          Rows:
+          <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }} className="border border-slate-300 rounded px-1.5 py-1">
+            {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+      </div>
+
+      {/* Detail modal */}
+      {detail && (
+        <div className="fixed inset-0 z-[1200] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setDetail(null)}>
+          <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-gradient-to-r from-brand-700 to-field-700 text-white px-4 py-3 flex items-center justify-between">
+              <div>
+                <div className="font-semibold">{detail.village === 'Unknown' ? 'Submission' : detail.village}</div>
+                <div className="text-xs text-white/80">#{detail.id}</div>
+              </div>
+              <button onClick={() => setDetail(null)} className="text-white/90 text-xl leading-none">×</button>
+            </div>
+            <div className="p-4 space-y-2 text-sm">
+              {detail.photo && (
+                <button onClick={() => setLightbox(detail.photo)} className="block w-full">
+                  <img src={detail.photo} alt="pipe reading" className="w-full rounded-lg border border-slate-200 mb-2 cursor-zoom-in" />
+                </button>
+              )}
+              <Row k="Surveyor" v={detail.surveyor} />
+              <Row k="Village" v={detail.village} />
+              <Row k="Pipe ID" v={detail.meter} mono />
+              <Row k="Reading" v={detail.reading} bold />
+              <Row k="Date" v={detail.date} />
+              <Row k="Time" v={detail.time} />
+              <Row k="Start" v={detail.start} />
+              <Row k="End" v={detail.end} />
+              <Row k="GPS" v={detail.gps} mono />
+              <Row k="Submitted" v={detail.submitted} />
+              {detail.lat && (
+                <a target="_blank" rel="noreferrer" href={`https://www.google.com/maps/dir/?api=1&destination=${detail.lat},${detail.lng}`}
+                  className="inline-block mt-2 px-3 py-2 bg-field-600 text-white rounded-lg text-xs">🧭 Directions to this pipe</a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Photo lightbox — stays in-app, with a clear Back button */}
+      {lightbox && (
+        <div className="fixed inset-0 z-[1300] bg-black/85 flex flex-col" onClick={() => setLightbox(null)}>
+          <div className="flex items-center justify-between px-4 py-3 text-white" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setLightbox(null)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-sm font-medium">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              Back
+            </button>
+            <a href={lightbox} target="_blank" rel="noreferrer" className="text-xs text-white/80 hover:text-white underline">Open original ↗</a>
+          </div>
+          <div className="flex-1 flex items-center justify-center p-4 overflow-auto" onClick={() => setLightbox(null)}>
+            <img src={lightbox} alt="pipe photo" className="max-w-full max-h-full rounded-lg shadow-2xl" onClick={(e) => e.stopPropagation()} />
+          </div>
+          <div className="text-center text-white/50 text-xs pb-3">Tap anywhere to go back</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Row({ k, v, mono, bold }) {
+  return (
+    <div className="flex justify-between gap-3 py-1 border-b border-slate-50">
+      <span className="text-slate-500">{k}</span>
+      <span className={`text-right ${mono ? 'font-mono text-xs' : ''} ${bold ? 'font-semibold' : ''}`}>{v || '–'}</span>
+    </div>
+  );
+}
