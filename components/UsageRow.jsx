@@ -56,6 +56,25 @@ export default function UsageRow({ entry, previous, current, flag, hideFlags = f
   );
 }
 
+
+// Two photos per pipe submission: the reading close-up and the wider field
+// shot. Label each so they read as two distinct photos, and dedupe by filename.
+function labelForPhoto(a) {
+  const q = String(a.question_xpath || a.filename || '').toLowerCase();
+  if (q.includes('photo_reading')) return 'Reading photo';
+  if (q.includes('field_photo')) return 'Field photo';
+  return 'Photo';
+}
+function uniquePhotos(atts) {
+  const seen = new Set(); const out = [];
+  for (const a of (atts || [])) {
+    const base = a.media_file_basename || a.filename || a.download_url || '';
+    if (seen.has(base)) continue;
+    seen.add(base); out.push(a);
+  }
+  return out;
+}
+
 function Panel({ label, submission, color }) {
   const [lb, setLb] = useState(null);
   if (!submission) {
@@ -69,26 +88,29 @@ function Panel({ label, submission, color }) {
 
   const reading = getField(submission, 'endReading');
   const surveyor = getField(submission, 'surveyor');
-  const photos = submission._attachments || [];
+  const photos = uniquePhotos(submission._attachments);
 
   return (
     <div className={`rounded border ${palette} p-3`}>
       <div className="text-xs uppercase tracking-wide text-slate-600 font-semibold mb-1">{label}</div>
-      <div className="text-2xl font-bold tabular-nums mb-1">{reading ?? '—'}</div>
+      <div className="text-2xl font-bold tabular-nums mb-1">{reading ?? '—'}<span className="text-sm font-normal text-slate-400"> mm</span></div>
       <div className="text-xs text-slate-600 mb-2">
         {new Date(submission._submission_time).toLocaleString()}<br/>
         by {surveyor || '—'} · #{submission._id}
       </div>
       {photos.length > 0 && (
-        <div className="grid grid-cols-2 gap-1.5 mt-2">
+        <div className={`grid ${photos.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5 mt-2`}>
           {photos.slice(0, 2).map((a) => (
-            <button key={a.id} type="button" onClick={() => setLb(`/api/photo?url=${encodeURIComponent(a.download_url)}`)}>
-              <img
-                src={`/api/photo?url=${encodeURIComponent(a.download_small_url || a.download_url)}`}
-                alt={a.filename}
-                className="w-full h-28 object-cover rounded border border-slate-200 cursor-zoom-in"
-              />
-            </button>
+            <figure key={a.uid || a.id || a.filename} className="m-0">
+              <button type="button" onClick={() => setLb(`/api/photo?url=${encodeURIComponent(a.download_url)}`)} className="block w-full">
+                <img
+                  src={`/api/photo?url=${encodeURIComponent(a.download_small_url || a.download_url)}`}
+                  alt={labelForPhoto(a)}
+                  className="w-full h-28 object-cover rounded border border-slate-200 cursor-zoom-in"
+                />
+              </button>
+              <figcaption className="text-[10px] text-slate-500 mt-0.5 text-center">{labelForPhoto(a)}</figcaption>
+            </figure>
           ))}
         </div>
       )}

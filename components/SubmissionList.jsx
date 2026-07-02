@@ -86,7 +86,7 @@ function SubmissionCard({ submission, isOpen, flag, isVerified, canVerify, busy,
         </div>
         <div className="text-right shrink-0">
           <div className="text-base font-bold tabular-nums">{endR ?? '—'}</div>
-          <div className="text-xs text-slate-500">reading</div>
+          <div className="text-xs text-slate-500">mm</div>
         </div>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}>
           <path d="M6 9l6 6 6-6"/>
@@ -150,7 +150,7 @@ function SubmissionDetail({ submission, flag, isVerified, canVerify, busy, onTog
 
 function SubmissionPanel({ label, submission, highlight }) {
   const [lb, setLb] = useState(null);
-  const photos = submission._attachments || [];
+  const photos = uniquePhotos(submission._attachments);
   const borderClass = highlight === 'red'
     ? 'border-red-300 bg-red-50'
     : highlight === 'emerald'
@@ -175,21 +175,43 @@ function SubmissionPanel({ label, submission, highlight }) {
           ))}
       </dl>
       {photos.length > 0 && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className={`grid ${photos.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
           {photos.slice(0, 2).map((a) => (
-            <button key={a.id} type="button" onClick={() => setLb(`/api/photo?url=${encodeURIComponent(a.download_url)}`)} className="block">
-              <img
-                src={`/api/photo?url=${encodeURIComponent(a.download_small_url || a.download_url)}`}
-                alt={a.filename}
-                className="w-full h-36 object-cover rounded border border-slate-200 cursor-zoom-in"
-              />
-            </button>
+            <figure key={a.uid || a.id || a.filename} className="m-0">
+              <button type="button" onClick={() => setLb(`/api/photo?url=${encodeURIComponent(a.download_url)}`)} className="block w-full">
+                <img
+                  src={`/api/photo?url=${encodeURIComponent(a.download_small_url || a.download_url)}`}
+                  alt={labelForPhoto(a)}
+                  className="w-full h-36 object-cover rounded border border-slate-200 cursor-zoom-in"
+                />
+              </button>
+              <figcaption className="text-[10px] text-slate-500 mt-1 text-center">{labelForPhoto(a)}</figcaption>
+            </figure>
           ))}
         </div>
       )}
       {lb && <Lightbox src={lb} onClose={() => setLb(null)} label="Pipe photo" />}
     </div>
   );
+}
+
+
+// Two photos per pipe submission: the reading close-up and the wider field
+// shot. Label each so they read as two distinct photos, and dedupe by filename.
+function labelForPhoto(a) {
+  const q = String(a.question_xpath || a.filename || '').toLowerCase();
+  if (q.includes('photo_reading')) return 'Reading photo';
+  if (q.includes('field_photo')) return 'Field photo';
+  return 'Photo';
+}
+function uniquePhotos(atts) {
+  const seen = new Set(); const out = [];
+  for (const a of (atts || [])) {
+    const base = a.media_file_basename || a.filename || a.download_url || '';
+    if (seen.has(base)) continue;
+    seen.add(base); out.push(a);
+  }
+  return out;
 }
 
 function prettyKey(k) {

@@ -1,12 +1,12 @@
 {
-  "name": "Water Meter Dashboard",
-  "short_name": "WaterMeter",
-  "description": "Digital Village Project — twice-weekly water meter reading tracker",
+  "name": "PVC Pipe Readings",
+  "short_name": "PipeReadings",
+  "description": "Digital Village Project — AWD PVC pipe water-level reading tracker",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0ea5e9",
-  "theme_color": "#0c4a6e",
+  "background_color": "#0369a1",
+  "theme_color": "#16a34a",
   "orientation": "portrait",
   "icons": [
     { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },

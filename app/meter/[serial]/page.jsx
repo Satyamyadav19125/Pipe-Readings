@@ -61,7 +61,7 @@ export default async function MeterPage({ params }) {
 
       <div className={`grid ${isAdmin ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-3'} gap-2 sm:gap-3`}>
         <Stat label="Total submissions" value={mine.length} color="bg-slate-100" />
-        <Stat label="Latest reading" value={latest ?? '—'} color="bg-brand-50" />
+        <Stat label="Latest reading (mm)" value={latest ?? '—'} color="bg-brand-50" />
         <Stat label="Total rise" value={totalUsage.toLocaleString()} color="bg-emerald-50" />
         {isAdmin && (
           <Stat label="Flagged" value={flaggedHere} color={flaggedHere > 0 ? 'bg-red-50' : 'bg-slate-50'} />

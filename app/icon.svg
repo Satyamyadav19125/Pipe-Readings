@@ -1,16 +1,28 @@
 <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0ea5e9"/>
-      <stop offset="100%" stop-color="#0c4a6e"/>
+      <stop offset="0%" stop-color="#16a34a"/>
+      <stop offset="100%" stop-color="#0369a1"/>
     </linearGradient>
-    <linearGradient id="drop" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#e0f2fe"/>
+    <linearGradient id="water" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7dd3fc"/>
+      <stop offset="100%" stop-color="#0284c7"/>
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="110" fill="url(#bg)"/>
-  <path d="M256 90 C 256 90, 370 215, 370 310 C 370 374, 318 422, 256 422 C 194 422, 142 374, 142 310 C 142 215, 256 90, 256 90 Z" fill="url(#drop)"/>
-  <ellipse cx="218" cy="290" rx="22" ry="50" fill="rgba(255,255,255,0.55)" transform="rotate(-22 218 290)"/>
-  <circle cx="256" cy="385" r="14" fill="#0ea5e9" opacity="0.4"/>
+  <!-- rounded app background: field green -> water blue (AWD) -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- soil surface line -->
+  <rect x="72" y="250" width="368" height="16" rx="8" fill="#ffffff" opacity="0.22"/>
+  <!-- observation pipe body -->
+  <rect x="198" y="92" width="116" height="336" rx="30" fill="#f8fafc" stroke="#e2e8f0" stroke-width="6"/>
+  <!-- water level inside the pipe (lower portion) -->
+  <rect x="212" y="300" width="88" height="116" rx="16" fill="url(#water)"/>
+  <!-- pipe cap -->
+  <rect x="190" y="80" width="132" height="34" rx="17" fill="#cbd5e1"/>
+  <!-- perforation holes along the pipe -->
+  <circle cx="256" cy="150" r="8" fill="#cbd5e1"/>
+  <circle cx="256" cy="196" r="8" fill="#cbd5e1"/>
+  <circle cx="256" cy="242" r="8" fill="#cbd5e1"/>
+  <!-- bright water-level indicator line -->
+  <rect x="178" y="296" width="156" height="9" rx="4.5" fill="#ffffff" opacity="0.85"/>
 </svg>

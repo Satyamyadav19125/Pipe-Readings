@@ -4,24 +4,19 @@ import { useEffect, useState, useRef } from 'react';
 import DataStorage from '@/components/DataStorage';
 
 const FLAG_LABELS = {
-  rollback: 'Rollback (reading went backwards)',
-  reverse: 'Reverse (end < start within submission)',
-  huge_jump: 'Huge jump (>100,000 units)',
-  growth_anomaly: 'Growth anomaly (5× normal rate)',
-  stale_no_reading: 'Stale (no reading for 10+ days)',
-  stale_unchanged: 'Stuck (3 same readings)',
+  // ON by default for pipes
+  missing_photo: 'Missing photo on a submission',
+  stale_no_reading: 'Stale — no reading for 7+ days',
+  stale_unchanged: 'Stuck — 3 identical water-level readings in a row',
   future_date: 'Future-dated reading',
-  out_of_sequence: 'Date earlier than previous reading',
-  zero_consumption: 'Zero usage over 7+ days (stuck/bypassed)',
-  duplicate_same_day: 'Same meter read twice in one day',
-  missing_photo: 'Missing pipe photo',
-  invalid_meter_id: 'Invalid meter ID format (not WM######)',
-  gps_outlier: 'GPS far from meter\'s usual spot',
-  digit_count: 'Digit-count jump (likely typo)',
-  identical_gps: 'Same GPS used by different meters',
-  fabrication_speed: 'Surveyor logged readings impossibly fast (<15s apart)',
+  out_of_sequence: 'Reading date earlier than the previous one',
+  // Opt-in extras (off by default)
+  duplicate_same_day: 'Same pipe read twice in one day',
+  gps_outlier: "GPS far from this pipe's usual spot",
+  identical_gps: 'Same GPS used by different pipes',
+  digit_count: 'Digit-count jump in the reading (likely typo)',
+  fabrication_speed: 'Readings logged impossibly fast (<15s apart)',
   night_reading: 'Reading taken at night (10pm–5am)',
-  village_outlier: 'Usage far above village neighbours',
 };
 
 // All sections, in the order shown on the page. Order matters: this is the
