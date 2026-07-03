@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchSubmissions } from '@/lib/kobo';
+import { fetchSubmissions, fetchFormMaster } from '@/lib/kobo';
 import { getCurrentUser } from '@/lib/auth';
 import { getSettings } from '@/lib/db';
 import { getField, parseReading } from '@/lib/fieldMap';
@@ -24,8 +24,9 @@ export async function GET(request) {
 
   let submissions = [];
   let settings;
+  let master = { ok: false, villages: [], pipes: [] };
   try {
-    [submissions, settings] = await Promise.all([fetchSubmissions(), getSettings()]);
+    [submissions, settings, master] = await Promise.all([fetchSubmissions(), getSettings(), fetchFormMaster()]);
   } catch (e) {
     return NextResponse.json({ error: e.message, villages: [] }, { status: 200 });
   }
@@ -62,6 +63,20 @@ export async function GET(request) {
   const isCurrent = now.getTime() >= periodStart.getTime() && now.getTime() < periodEnd.getTime();
 
   const meters = {};
+
+  // Seed with the FULL pipe list from the form definition, so pipes that have
+  // never been read appear as "pending" (0 readings) instead of being
+  // invisible. Falls back silently to submissions-only when the form has no
+  // choice lists (e.g. CSV-driven selects).
+  if (master.ok) {
+    for (const pm of master.pipes) {
+      const village = pm.village || 'Unassigned';
+      if (allowed && !allowed.has(String(village).trim().toLowerCase())) continue;
+      const key = `${village}|||${pm.serial}`;
+      meters[key] = { serial: pm.serial, village, countThisPeriod: 0, lastReading: null, lastDate: null, lastSurveyor: null, lastTs: 0 };
+    }
+  }
+
   for (const s of submissions) {
     const serial = getField(s, 'serial');
     if (!serial) continue;

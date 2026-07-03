@@ -38,7 +38,7 @@ export default async function SubmissionsPage({ searchParams }) {
   // colouring, or "this submission was flagged" warnings — quality review
   // is the admin's job, not theirs. Their view stays positive and focused
   // on their own work.
-  const allFlags = isAdmin ? detectRedFlags(scopedAll, { enabled: settings?.redFlags }) : {};
+  const allFlags = isAdmin ? detectRedFlags(scopedAll, { enabled: settings?.redFlags, pipe: settings?.pipe }) : {};
   const isRed = (id) => isAdmin && !!allFlags[id] && !verifiedIds.has(String(id));
 
   const filtered0 = applyUrlFilters(scopedAll, sp);

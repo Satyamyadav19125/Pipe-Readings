@@ -207,7 +207,7 @@ export default function AssignmentsPage() {
                         <input value={person.email || ''} onChange={(e) => updatePerson(i, 'email', e.target.value)} placeholder="email" className="aw-input"/>
                       </Field>
                     </div>
-                    <PhotoUpload value={person.photo} onChange={(url) => updatePerson(i, 'photo', url)} label="Photo" />
+                    <PhotoUpload value={person.photo} onChange={(url) => updatePerson(i, 'photo', url)} label="Photo" showPreview={false} />
                     <Field label="Bio">
                       <input value={person.bio || ''} onChange={(e) => updatePerson(i, 'bio', e.target.value)} placeholder="Short bio" className="aw-input"/>
                     </Field>

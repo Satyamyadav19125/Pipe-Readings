@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Component, useState } from 'react';
 import AssignmentsPage from '../assignments/page';
 import TasksPage from '../tasks/page';
 import MissedPage from '../missed/page';
@@ -12,6 +12,29 @@ const TABS = [
   { key: 'tasks', label: '✅ Tasks' },
   { key: 'missed', label: '📌 Missed readings' },
 ];
+
+// If a tab crashes client-side (e.g. on a specific phone browser), show the
+// actual error + a retry button instead of a silent blank page. This makes
+// mobile-only failures diagnosable from a screenshot.
+class TabErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">
+          <p className="font-medium">⚠️ This tab hit an error on your device.</p>
+          <p className="mt-1 break-all font-mono text-xs">{String(this.state.error?.message || this.state.error)}</p>
+          <button onClick={() => this.setState({ error: null })}
+            className="mt-2 px-3 py-1.5 text-xs bg-red-600 text-white rounded hover:bg-red-700">
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function TeamPage() {
   const [tab, setTab] = useState('assignments');
@@ -29,9 +52,11 @@ export default function TeamPage() {
         ))}
       </div>
 
-      <div className={tab === 'assignments' ? '' : 'hidden'}><AssignmentsPage /></div>
-      {tab === 'tasks' && <TasksPage />}
-      {tab === 'missed' && <MissedPage />}
+      <TabErrorBoundary>
+        <div className={tab === 'assignments' ? '' : 'hidden'}><AssignmentsPage /></div>
+        {tab === 'tasks' && <TasksPage />}
+        {tab === 'missed' && <MissedPage />}
+      </TabErrorBoundary>
     </div>
   );
 }

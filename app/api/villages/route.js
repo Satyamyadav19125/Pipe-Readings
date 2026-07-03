@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchSubmissions } from '@/lib/kobo';
+import { fetchSubmissions, fetchFormMaster } from '@/lib/kobo';
 import { getCurrentUser } from '@/lib/auth';
 import { filterSubmissionsForUser } from '@/lib/filter';
 import { getField } from '@/lib/fieldMap';
@@ -14,8 +14,8 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
 
   try {
-    let subs = await fetchSubmissions();
-    subs = await filterSubmissionsForUser(subs);
+    const [subsRaw, master] = await Promise.all([fetchSubmissions(), fetchFormMaster()]);
+    const subs = await filterSubmissionsForUser(subsRaw);
 
     const villages = new Set();
     const meters = new Set();
@@ -28,6 +28,28 @@ export async function GET() {
       if (village && serial) {
         if (!metersByVillage[village]) metersByVillage[village] = new Set();
         metersByVillage[village].add(serial);
+      }
+    }
+
+    // Merge the FULL lists from the Kobo form definition so villages and
+    // pipes with zero submissions still appear (assignment chips + filters).
+    // Surveyors stay scoped to their own assigned villages.
+    if (master.ok) {
+      const allowed = user.role === 'user'
+        ? new Set((user.villages || []).map((v) => String(v).trim().toLowerCase()))
+        : null;
+      for (const v of master.villages) {
+        if (allowed && !allowed.has(String(v).trim().toLowerCase())) continue;
+        villages.add(v);
+      }
+      for (const pm of master.pipes) {
+        const v = pm.village;
+        if (allowed && (!v || !allowed.has(String(v).trim().toLowerCase()))) continue;
+        meters.add(pm.serial);
+        if (v) {
+          if (!metersByVillage[v]) metersByVillage[v] = new Set();
+          metersByVillage[v].add(pm.serial);
+        }
       }
     }
     return NextResponse.json({

@@ -30,7 +30,7 @@ function resizeImage(file, maxDim, quality) {
   });
 }
 
-export default function PhotoUpload({ value, onChange, label = 'Photo', kind = 'profile' }) {
+export default function PhotoUpload({ value, onChange, label = 'Photo', kind = 'profile', showPreview = true }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [view, setView] = useState(false);
@@ -78,13 +78,13 @@ export default function PhotoUpload({ value, onChange, label = 'Photo', kind = '
     <div>
       <span className="block text-xs font-medium text-slate-600 mb-1">{label}</span>
       <div className="flex items-center gap-3">
-        {value ? (
+        {showPreview && (value ? (
           <button type="button" onClick={() => setView(true)} title="Tap to view photo">
             <img src={value} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-brand-200 cursor-zoom-in" onError={(e) => { e.target.style.display = 'none'; }} />
           </button>
         ) : (
           <div className="w-14 h-14 rounded-full bg-gradient-to-br from-brand-100 to-field-100 flex items-center justify-center text-xl">👤</div>
-        )}
+        ))}
         <div className="flex flex-col gap-1">
           <button type="button" onClick={() => fileRef.current?.click()} disabled={busy}
             className="px-3 py-1.5 text-xs bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:bg-slate-300">
@@ -97,7 +97,7 @@ export default function PhotoUpload({ value, onChange, label = 'Photo', kind = '
         <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
       </div>
       {err && <p className="text-xs text-red-600 mt-1">{err}</p>}
-      <p className="text-[10px] text-slate-400 mt-1">Tap the photo to view it full size. Resized to {maxDim} px to balance HD and database space.</p>
+      <p className="text-[10px] text-slate-400 mt-1">{showPreview && value ? 'Tap the photo to view it full size. ' : ''}Resized to {maxDim} px to balance HD and database space.</p>
       {view && <Lightbox src={value} onClose={() => setView(false)} label={label} />}
     </div>
   );

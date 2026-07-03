@@ -13,7 +13,7 @@ export const metadata = {
 };
 
 export const viewport = {
-  width: 'device-width', initialScale: 1, maximumScale: 1, userScalable: false, themeColor: '#0c4a6e',
+  width: 'device-width', initialScale: 1, maximumScale: 1, userScalable: false, themeColor: '#16a34a',
 };
 
 // Runs BEFORE paint so the saved theme applies without a white/black flash.

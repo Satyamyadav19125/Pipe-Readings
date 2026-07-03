@@ -84,3 +84,14 @@ html { scroll-behavior: smooth; }
 
 .dark .hover\:bg-slate-50:hover, .dark .hover\:bg-slate-100:hover,
 .dark .hover\:bg-gray-200:hover { background-color: #2b3a55 !important; }
+
+/* ---- dark fixes for translucent light bars (slash-opacity variants) ----
+   The dark remap above covers bg-slate-100 etc., but Tailwind's opacity
+   variants like bg-slate-100/95 are separate classes. The Settings sticky
+   header uses bg-slate-100/95, which stayed light in dark mode while the
+   title text went light -> invisible title. These overrides fix that class
+   and the other translucent-white surfaces used across the app. */
+.dark .bg-slate-100\/95 { background-color: rgba(15, 26, 46, 0.95) !important; }
+.dark .bg-white\/80 { background-color: rgba(30, 41, 59, 0.8) !important; }
+.dark .bg-white\/70 { background-color: rgba(30, 41, 59, 0.7) !important; }
+.dark .bg-white\/50 { background-color: rgba(30, 41, 59, 0.5) !important; }

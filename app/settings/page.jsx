@@ -10,6 +10,8 @@ const FLAG_LABELS = {
   stale_unchanged: 'Stuck — 3 identical water-level readings in a row',
   future_date: 'Future-dated reading',
   out_of_sequence: 'Reading date earlier than the previous one',
+  inside_out_of_range: 'Inside reading outside the valid range (see Pipe parameters)',
+  outside_out_of_range: 'Outside height outside the expected band (see Pipe parameters)',
   // Opt-in extras (off by default)
   duplicate_same_day: 'Same pipe read twice in one day',
   gps_outlier: "GPS far from this pipe's usual spot",
@@ -26,6 +28,7 @@ const SECTIONS = [
   { id: 'forms',    icon: '📋', label: 'Kobo forms',      hint: 'Switch seasons' },
   { id: 'project',  icon: '🌱', label: 'Project info',    hint: 'Name & description' },
   { id: 'reading',  icon: '🎯', label: 'Reading targets', hint: 'Count & period' },
+  { id: 'pipe',     icon: '📏', label: 'Pipe parameters', hint: 'Valid mm ranges' },
   { id: 'photo',    icon: '🖼️', label: 'Photo quality',  hint: 'HD vs space' },
   { id: 'contact',  icon: '📬', label: 'Contact info',    hint: 'Emails & phone' },
   { id: 'flags',    icon: '🚩', label: 'Red flag rules',  hint: 'What to detect' },
@@ -69,6 +72,7 @@ export default function SettingsPage() {
       // Fill them with safe defaults so the page never crashes on access.
       setSettings({
         contact: {}, redFlags: {}, project: {}, forms: [],
+        pipe: { maxInsideMm: 400, outsideMinMm: 100, outsideMaxMm: 300 },
         reading: {
           target: 2, periodLabel: 'week', periodDays: 7,
           photoMaxPx: 1600, photoQuality: 0.85,
@@ -79,6 +83,10 @@ export default function SettingsPage() {
         redFlags: { ...(data.settings.redFlags || {}) },
         project: { ...(data.settings.project || {}) },
         forms: Array.isArray(data.settings.forms) ? data.settings.forms : [],
+        pipe: {
+          maxInsideMm: 400, outsideMinMm: 100, outsideMaxMm: 300,
+          ...(data.settings.pipe || {}),
+        },
         reading: {
           target: 2, periodLabel: 'week', periodDays: 7,
           photoMaxPx: 1600, photoQuality: 0.85,
@@ -113,6 +121,7 @@ export default function SettingsPage() {
 
   function updateContact(k, v) { setS({ ...settings, contact: { ...settings.contact, [k]: v } }); }
   function updateFlag(k, v) { setS({ ...settings, redFlags: { ...settings.redFlags, [k]: v } }); }
+  function updatePipe(k, v) { setS({ ...settings, pipe: { ...(settings.pipe || {}), [k]: v } }); }
   function updateProject(k, v) { setS({ ...settings, project: { ...settings.project, [k]: v } }); }
 
   function addForm() {
@@ -234,8 +243,32 @@ export default function SettingsPage() {
       </Section>
 
       {/* Reading targets */}
-      <Section id="reading" title="🎯 Reading targets" subtitle="How many readings each meter needs, and how often">
+      <Section id="reading" title="🎯 Reading targets" subtitle="How many readings each pipe needs, and how often">
         <ReadingTargets settings={settings} setSettings={setS} />
+      </Section>
+
+      {/* Pipe parameters — physical mm ranges used by the range red flags */}
+      <Section id="pipe" title="📏 Pipe parameters"
+        subtitle="Physical limits of the observation pipes, in millimetres. Readings outside these ranges get red-flagged.">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Field label="Max inside reading (mm)">
+            <input type="number" min="0" value={settings.pipe?.maxInsideMm ?? ''} placeholder="400"
+              onChange={(e) => updatePipe('maxInsideMm', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
+          </Field>
+          <Field label="Outside height — minimum (mm)">
+            <input type="number" min="0" value={settings.pipe?.outsideMinMm ?? ''} placeholder="100"
+              onChange={(e) => updatePipe('outsideMinMm', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
+          </Field>
+          <Field label="Outside height — maximum (mm)">
+            <input type="number" min="0" value={settings.pipe?.outsideMaxMm ?? ''} placeholder="300"
+              onChange={(e) => updatePipe('outsideMaxMm', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
+          </Field>
+        </div>
+        <div className="text-xs text-slate-500 space-y-1 mt-2">
+          <p>• <b>Max inside reading</b> — the deepest water level physically possible inside the pipe. Anything above it (or below 0) flags as <i>Inside reading outside the valid range</i>.</p>
+          <p>• <b>Outside height band</b> — how far the pipe should stick out of the soil. A measurement outside this band flags as <i>Outside height outside the expected band</i> (pipe sunk, lifted, or re-installed).</p>
+          <p>• Clear a box to disable that check without touching the red-flag toggles.</p>
+        </div>
       </Section>
 
       {/* Photo quality */}

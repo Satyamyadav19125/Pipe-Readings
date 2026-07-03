@@ -36,7 +36,7 @@ export default async function UsagePage({ searchParams }) {
   // Surveyors don't see flag info. They just see their consumption history.
   const flags = {};
   if (isAdmin) {
-    const rawFlags = detectRedFlags(scoped, { enabled: settings?.redFlags });
+    const rawFlags = detectRedFlags(scoped, { enabled: settings?.redFlags, pipe: settings?.pipe });
     for (const id in rawFlags) { if (!verifiedIds.has(String(id))) flags[id] = rawFlags[id]; }
   }
 

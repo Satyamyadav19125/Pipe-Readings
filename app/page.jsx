@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { fetchSubmissions } from '@/lib/kobo';
+import { fetchSubmissions, fetchFormMaster } from '@/lib/kobo';
 import { computeWeeklyStatus, deriveMeters, daysRemaining } from '@/lib/weekly';
 import { detectRedFlags } from '@/lib/redflags';
 import { getAssignments, isDbConfigured, getSettings, getMongoHealth, getVerifiedIds } from '@/lib/db';
@@ -20,6 +20,9 @@ export default async function HomePage() {
   let koboError = null;
   try { submissions = await fetchSubmissions(); }
   catch (e) { koboError = e.message; }
+  // Full pipe/village lists from the form definition — lets the KPIs show
+  // coverage out of ALL pipes, not just the ones already submitted.
+  const master = await fetchFormMaster();
 
   let assignments = [];
   let settings;
@@ -54,7 +57,7 @@ export default async function HomePage() {
   if (isAdmin) {
     let verifiedIds = new Set();
     try { verifiedIds = await getVerifiedIds(); } catch {}
-    const rawFlags = detectRedFlags(submissions, { enabled: settings?.redFlags });
+    const rawFlags = detectRedFlags(submissions, { enabled: settings?.redFlags, pipe: settings?.pipe });
     const flags = {};
     for (const id in rawFlags) { if (!verifiedIds.has(String(id))) flags[id] = rawFlags[id]; }
     flaggedTotal = Object.keys(flags).length;
@@ -71,7 +74,7 @@ export default async function HomePage() {
   }
   const uniqueVillages = !isAdmin
     ? (currentUser.villages || []).length
-    : Object.keys(villageCounts).length;
+    : new Set([...Object.keys(villageCounts).filter((v) => v !== 'Unknown'), ...(master.ok ? master.villages : [])]).size;
   const uniqueSurveyors = Object.keys(surveyorCounts).length;
 
   const villageBars = Object.entries(villageCounts).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8);
@@ -84,6 +87,21 @@ export default async function HomePage() {
   const status = computeWeeklyStatus(meters, submissions, new Date(), { target, periodDays });
   const remaining = daysRemaining();
   const done = status.filter((s) => s.status === 'done').length;
+  // Coverage denominator: EVERY pipe from the form definition (surveyors see
+  // only their villages), so "done" is measured out of all pipes — including
+  // pipes that have never been read at all.
+  let pipesTotal = meters.length;
+  if (master.ok && master.pipes.length > 0) {
+    const allowedV = !isAdmin
+      ? new Set((currentUser.villages || []).map((v) => String(v).trim().toLowerCase()))
+      : null;
+    const serialSet = new Set(meters.map((m) => m.serial));
+    for (const pm of master.pipes) {
+      if (allowedV && (!pm.village || !allowedV.has(String(pm.village).trim().toLowerCase()))) continue;
+      serialSet.add(pm.serial);
+    }
+    pipesTotal = serialSet.size;
+  }
   const partial = status.filter((s) => s.status === 'partial').length;
   const pending = status.filter((s) => s.status === 'pending').length;
 
@@ -127,14 +145,14 @@ export default async function HomePage() {
           <Kpi label="Quality rate" value={submissions.length > 0 ? `${Math.round((cleanTotal / submissions.length) * 100)}%` : '—'} color="bg-emerald-50 text-emerald-900" icon="📊" />
           <Kpi label="Villages" value={uniqueVillages} color="bg-amber-50 text-amber-900" icon="🏘️" />
           <Kpi label="Active surveyors" value={uniqueSurveyors} color="bg-violet-50 text-violet-900" icon="👤" />
-          <Kpi label={`This ${periodLabel}`} value={`${done}/${meters.length} done`} color="bg-sky-50 text-sky-900" icon="📅" />
+          <Kpi label={`This ${periodLabel}`} value={`${done}/${pipesTotal} done`} color="bg-sky-50 text-sky-900" icon="📅" />
           <Kpi label={`Days left in ${periodLabel}`} value={remaining} color="bg-slate-100 text-slate-900" icon="⏳" />
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
           <Kpi label="My submissions" value={submissions.length.toLocaleString()} color="bg-brand-50 text-brand-900" icon="📋" />
           <Kpi label="My villages" value={uniqueVillages} color="bg-amber-50 text-amber-900" icon="🏘️" />
-          <Kpi label={`This ${periodLabel}`} value={`${done}/${meters.length} done`} color="bg-sky-50 text-sky-900" icon="📅" />
+          <Kpi label={`This ${periodLabel}`} value={`${done}/${pipesTotal} done`} color="bg-sky-50 text-sky-900" icon="📅" />
           <Kpi label={`Days left in ${periodLabel}`} value={remaining} color="bg-slate-100 text-slate-900" icon="⏳" />
         </div>
       )}

@@ -41,7 +41,7 @@ export default async function MapPage({ searchParams }) {
 
   const scoped0 = await filterSubmissionsForUser(submissions);
   // Surveyors see all their pins as clean — no red flag indicators on the map.
-  const flags = isAdmin ? detectRedFlags(scoped0, { enabled: settings?.redFlags }) : {};
+  const flags = isAdmin ? detectRedFlags(scoped0, { enabled: settings?.redFlags, pipe: settings?.pipe }) : {};
   const scoped = applyUrlFilters(scoped0, sp);
 
   const points = [];
@@ -62,7 +62,14 @@ export default async function MapPage({ searchParams }) {
       });
     }
   }
-  const flaggedTotal = points.filter((p) => p.isFlagged).length;
+  const flaggedOnMap = points.filter((p) => p.isFlagged).length;
+  // Count flags across ALL filtered submissions — including ones without GPS
+  // that can't be drawn as pins — so this number always matches the
+  // Submissions page instead of silently under-reporting.
+  const flaggedTotal = scoped.filter(
+    (s) => flags[s._id] && !verifiedIds.has(String(s._id))
+  ).length;
+  const flaggedNoGps = flaggedTotal - flaggedOnMap;
 
   return (
     <div className="space-y-3">
@@ -71,7 +78,8 @@ export default async function MapPage({ searchParams }) {
           <h2 className="text-xl font-semibold">🗺️ Map</h2>
           <p className="text-sm text-slate-500">
             {points.length} with GPS
-            {isAdmin && <> · <span className="text-red-600 font-medium">{flaggedTotal} flagged</span></>}
+            {isAdmin && <> · <span className="text-red-600 font-medium">{flaggedTotal} flagged</span>
+              {flaggedNoGps > 0 && <span className="text-slate-400"> ({flaggedNoGps} without GPS — not on map)</span>}</>}
             {' '}· tap a pin for details
           </p>
         </div>

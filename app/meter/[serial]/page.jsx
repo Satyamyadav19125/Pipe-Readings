@@ -24,7 +24,7 @@ export default async function MeterPage({ params }) {
   const mine = groups[serial] || [];
   // Flags are admin-only. Surveyors see the meter's history without any
   // quality-review markers.
-  const flags = isAdmin ? detectRedFlags(submissions, { enabled: settings?.redFlags }) : {};
+  const flags = isAdmin ? detectRedFlags(submissions, { enabled: settings?.redFlags, pipe: settings?.pipe }) : {};
 
   const sorted = [...mine].sort(
     (a, b) => new Date(b._submission_time).getTime() - new Date(a._submission_time).getTime()
