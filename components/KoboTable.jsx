@@ -17,6 +17,7 @@ const COLUMNS = [
   { key: 'village', label: 'Village', width: 90, mobile: true },
   { key: 'meter', label: 'Pipe ID', width: 110, mobile: true },
   { key: 'reading', label: 'Reading', width: 80, mobile: true },
+  { key: 'validation', label: 'Outside (mm)', mobile: false },
 ];
 const hideCls = (c) => (c.mobile ? '' : 'hidden md:table-cell');
 
@@ -140,6 +141,19 @@ export default function KoboTable({ rows }) {
               <button onClick={() => setDetail(null)} className="text-white/90 text-xl leading-none">×</button>
             </div>
             <div className="p-4 space-y-2 text-sm">
+              {Array.isArray(detail.fields) && detail.fields.length > 0 && (
+                <div className="mb-2">
+                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">All answers</div>
+                  <div className="border border-slate-200 rounded-lg divide-y divide-slate-100">
+                    {detail.fields.map(([k, v], i) => (
+                      <div key={i} className="flex items-start justify-between gap-3 px-2.5 py-1.5 text-sm">
+                        <span className="text-slate-500 capitalize">{k}</span>
+                        <span className="text-slate-900 dark:text-slate-100 font-medium text-right break-all">{v || '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {(detail.photos?.length ? detail.photos : (detail.photo ? [{ url: detail.photo, label: 'Photo' }] : [])).length > 0 && (
                 <div className={`grid ${((detail.photos?.length || 1) > 1) ? 'grid-cols-2' : 'grid-cols-1'} gap-2 mb-2`}>
                   {(detail.photos?.length ? detail.photos : [{ url: detail.photo, label: 'Photo' }]).map((p, i) => (

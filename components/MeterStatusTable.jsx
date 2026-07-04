@@ -35,7 +35,7 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
         else if (week === 'last') url += '?week=last';
         const res = await fetch(url);
         const d = await parseJsonSafe(res);
-        if (!res.ok) throw new Error(d.error || 'Failed to load meters');
+        if (!res.ok) throw new Error(d.error || 'Failed to load pipes');
         if (alive) { setData(d); setError(null); }
       } catch (e) { if (alive) setError(e.message); }
       finally { if (alive) setLoading(false); }
@@ -78,7 +78,7 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
 
   const title = pastWeek
     ? (isLast ? `📌 Last ${periodLabel} — missed readings` : `📌 Selected ${periodLabel} — missed readings`)
-    : `📋 This ${periodLabel}\u2019s meter readings`;
+    : `📋 This ${periodLabel}\u2019s pipe readings`;
 
   return (
     <div className="space-y-3">

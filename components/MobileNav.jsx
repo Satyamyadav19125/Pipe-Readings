@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -19,6 +19,8 @@ const baseLinks = [
 
 export default function MobileNav({ user, formUploadUrl }) {
   const [open, setOpen] = useState(false);
+  const [unreadTotal, setUnreadTotal] = useState(0);
+  const lastTotalRef = useRef(0);
   const pathname = usePathname();
 
   const isAdmin = user?.role === 'admin';
@@ -35,7 +37,42 @@ export default function MobileNav({ user, formUploadUrl }) {
         : [...baseLinks, { href: '/profile', label: 'My profile', icon: '👤' }])
     : [];
 
+  // Poll chat unread count for the badge on the Chat tab; fire a browser
+  // notification when NEW messages arrive while the user is elsewhere.
+  useEffect(() => {
+    if (!loggedIn) return;
+    let stop = false;
+    async function poll() {
+      try {
+        const r = await fetch('/api/chat/unread');
+        if (!r.ok || stop) return;
+        const d = await r.json();
+        const total = Number(d.total) || 0;
+        setUnreadTotal(total);
+        const prev = lastTotalRef.current;
+        lastTotalRef.current = total;
+        const away = document.hidden || !window.location.pathname.startsWith('/chat');
+        if (total > prev && away && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          const n = new Notification('💬 PVC Pipe Readings', {
+            body: total === 1 ? 'You have 1 unread chat message' : `You have ${total} unread chat messages`,
+            icon: '/icon-192.png', tag: 'pipe-chat',
+          });
+          n.onclick = () => { window.focus(); window.location.href = '/chat'; };
+        }
+      } catch {}
+    }
+    poll();
+    const t = setInterval(poll, 20000);
+    return () => { stop = true; clearInterval(t); };
+  }, [loggedIn]);
+
   const desktopLinks = links.filter((l) => l.href !== '/profile');
+
+  const ChatBadge = () => unreadTotal > 0 ? (
+    <span className="ml-1 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-bold bg-rose-500 text-white align-middle">
+      {unreadTotal > 99 ? '99+' : unreadTotal}
+    </span>
+  ) : null;
 
   return (
     <>
@@ -51,7 +88,7 @@ export default function MobileNav({ user, formUploadUrl }) {
             <nav className="hidden xl:flex items-center gap-0.5 text-sm">
               {desktopLinks.map((l) => (
                 <Link key={l.href} href={l.href} className={`px-2 py-1.5 rounded transition whitespace-nowrap ${pathname === l.href ? 'bg-white/20' : 'hover:bg-white/10'}`}>
-                  {l.label}
+                  {l.label}{l.href === '/chat' && <ChatBadge />}
                 </Link>
               ))}
             </nav>
@@ -126,6 +163,7 @@ export default function MobileNav({ user, formUploadUrl }) {
                 <Link key={l.href} href={l.href} onClick={() => setOpen(false)} className={`px-4 py-3 border-b border-slate-100 flex items-center gap-3 ${pathname === l.href ? 'bg-brand-50 text-brand-900 font-medium' : ''}`}>
                   <span>{l.icon}</span>
                   <span>{l.label}</span>
+                  {l.href === '/chat' && <ChatBadge />}
                 </Link>
               ))}
               <button onClick={doLogout} className="px-4 py-3 flex items-center gap-3 text-red-600 text-left">

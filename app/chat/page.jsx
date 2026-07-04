@@ -82,6 +82,8 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 export default function ChatPage() {
   const [user, setUser] = useState(undefined);
   const [channels, setChannels] = useState([]);
+  const [unread, setUnread] = useState({}); // channel -> count
+  const [notifState, setNotifState] = useState('unsupported');
   const [active, setActive] = useState('group');
   const [messages, setMessages] = useState([]);
   const [me, setMe] = useState('');
@@ -142,6 +144,31 @@ export default function ChatPage() {
     if (el) el.scrollTop = el.scrollHeight;
   }
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) setNotifState(Notification.permission);
+  }, []);
+  function enableNotifications() {
+    if (!('Notification' in window)) return;
+    Notification.requestPermission().then((p) => setNotifState(p));
+  }
+
+  const refreshUnread = useCallback(async () => {
+    try {
+      const r = await fetch('/api/chat/unread');
+      if (!r.ok) return;
+      const d = await r.json();
+      setUnread(d.counts || {});
+    } catch {}
+  }, []);
+
+  const markRead = useCallback((channel) => {
+    fetch('/api/chat/unread', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel }),
+    }).catch(() => {});
+    setUnread((u) => { const n = { ...u }; delete n[channel]; return n; });
+  }, []);
+
   const load = useCallback(async (channel) => {
     try {
       const res = await fetch(`/api/chat?channel=${encodeURIComponent(channel)}`);
@@ -156,8 +183,11 @@ export default function ChatPage() {
   useEffect(() => {
     if (!user) return;
     load(active);
-    const t = setInterval(() => load(active), 4000);
-    return () => clearInterval(t);
+    markRead(active);
+    refreshUnread();
+    const t = setInterval(() => { load(active); markRead(active); }, 4000);
+    const tu = setInterval(refreshUnread, 10000);
+    return () => { clearInterval(t); clearInterval(tu); };
   }, [user, active, load]);
 
   const msgCount = messages.length;
@@ -237,15 +267,62 @@ export default function ChatPage() {
     finally { setSending(false); e.target.value = ''; }
   }
 
+  // --- Camera (laptop/desktop): live getUserMedia preview + snap. Phones
+  // keep the native camera via the file input if getUserMedia fails. ---
+  const [camOpen, setCamOpen] = useState(false);
+  const videoRef = useRef(null);
+  const camStreamRef = useRef(null);
+
+  async function openCamera() {
+    setError(''); closePanels();
+    if (!window.isSecureContext) { setError('Camera needs HTTPS.'); return; }
+    if (!navigator.mediaDevices?.getUserMedia) { cameraRef.current?.click(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1600 } }, audio: false,
+      });
+      camStreamRef.current = stream;
+      setCamOpen(true);
+      setTimeout(() => { if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); } }, 50);
+    } catch (e2) {
+      if (e2?.name === 'NotAllowedError') setError('Camera permission was blocked. Allow it in the browser address bar and try again.');
+      cameraRef.current?.click();
+    }
+  }
+  function closeCamera() {
+    camStreamRef.current?.getTracks().forEach((t) => t.stop());
+    camStreamRef.current = null;
+    setCamOpen(false);
+  }
+  async function snapPhoto() {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    closeCamera();
+    setSending(true);
+    try {
+      const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.85));
+      if (!blob) throw new Error('Could not capture the photo.');
+      const dataUrl = await fileToDataUrl(blob);
+      const url = await uploadDataUrl(dataUrl);
+      await postMessage({ kind: 'image', mediaUrl: url, fileName: `camera-${Date.now()}.jpg` });
+    } catch (e2) { setError(e2.message); }
+    finally { setSending(false); }
+  }
+
   async function startRecording() {
     setError(''); closePanels();
     if (!navigator.mediaDevices?.getUserMedia) { setError('Microphone is not available in this browser.'); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
-        : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+      if (typeof MediaRecorder === 'undefined') { setError('Voice notes are not supported in this browser.'); return; }
+      const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
+        .find((m) => MediaRecorder.isTypeSupported(m)) || '';
       const rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 24000 } : undefined);
       const chunks = [];
+      rec.onerror = (ev) => setError('Recording failed: ' + (ev.error && ev.error.message ? ev.error.message : 'unknown error'));
       rec.ondataavailable = (ev) => { if (ev.data.size) chunks.push(ev.data); };
       rec.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
@@ -271,7 +348,7 @@ export default function ChatPage() {
         if (s >= 60) { clearInterval(tick); if (recRef.current?.state === 'recording') recRef.current.stop(); }
         if (recRef.current?.state !== 'recording') clearInterval(tick);
       }, 500);
-    } catch { setError('Could not access the microphone. Allow mic permission and try again.'); }
+    } catch (e2) { setError(e2 && e2.name === 'NotAllowedError' ? 'Microphone permission was blocked. Allow it in the browser address bar and try again.' : 'Could not access the microphone. Allow mic permission and try again.'); }
   }
   function stopRecording(cancel = false) {
     const rec = recRef.current;
@@ -393,12 +470,22 @@ export default function ChatPage() {
   return (
     <div className="space-y-2">
       <div className="flex gap-2 overflow-x-auto pb-1">
+        {notifState === 'default' && (
+          <button onClick={enableNotifications} className="px-3 py-1.5 rounded-full text-xs font-medium bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap">
+            🔔 Enable notifications
+          </button>
+        )}
         {channels.map((c) => (
           <button key={c.id} onClick={() => { setActive(c.id); closePanels(); }}
             className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap border transition flex items-center gap-1.5 ${
               active === c.id ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
             }`}>
             <span>{c.icon}</span>{c.label}
+            {unread[c.id] > 0 && active !== c.id && (
+              <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.15rem] h-[1.15rem] px-1 rounded-full text-[10px] font-bold bg-rose-500 text-white">
+                {unread[c.id] > 99 ? '99+' : unread[c.id]}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -544,7 +631,7 @@ export default function ChatPage() {
         {showPlus && (
           <div className="border-t border-slate-100 px-3 py-2 flex gap-2 flex-wrap bg-white shrink-0">
             <button onClick={() => galleryRef.current?.click()} className="attach-btn">🖼️<span>Gallery</span></button>
-            <button onClick={() => cameraRef.current?.click()} className="attach-btn">📸<span>Camera</span></button>
+            <button onClick={openCamera} className="attach-btn">📸<span>Camera</span></button>
             <button onClick={startRecording} className="attach-btn">🎤<span>Voice</span></button>
             <button onClick={() => audioRef.current?.click()} className="attach-btn">🎵<span>Audio</span></button>
             <button onClick={() => docRef.current?.click()} className="attach-btn">📄<span>Document</span></button>
@@ -618,6 +705,16 @@ export default function ChatPage() {
         </div>
       )}
 
+      {camOpen && (
+        <div className="fixed inset-0 z-[1400] bg-black/90 flex flex-col items-center justify-center p-4">
+          <video ref={videoRef} playsInline muted className="max-w-full max-h-[70vh] rounded-xl bg-black" />
+          <div className="flex gap-3 mt-4">
+            <button onClick={snapPhoto} className="px-5 py-2.5 bg-white text-slate-900 rounded-full font-semibold text-sm">📸 Snap & send</button>
+            <button onClick={closeCamera} className="px-5 py-2.5 bg-white/20 text-white rounded-full text-sm">Cancel</button>
+          </div>
+        </div>
+      )}
+
       <style jsx>{`
         :global(.attach-btn) {
           display: flex; align-items: center; gap: 0.375rem;
@@ -625,6 +722,8 @@ export default function ChatPage() {
           border: 1px solid #cbd5e1; background: white;
         }
         :global(.attach-btn:hover) { background: #f8fafc; }
+        :global(.dark .attach-btn) { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+        :global(.dark .attach-btn:hover) { background: #2b3a55; }
       `}</style>
     </div>
   );

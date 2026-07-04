@@ -29,6 +29,7 @@ const SECTIONS = [
   { id: 'project',  icon: '🌱', label: 'Project info',    hint: 'Name & description' },
   { id: 'reading',  icon: '🎯', label: 'Reading targets', hint: 'Count & period' },
   { id: 'pipe',     icon: '📏', label: 'Pipe parameters', hint: 'Valid mm ranges' },
+  { id: 'security', icon: '🔐', label: 'Admin passwords', hint: 'Change admin login' },
   { id: 'photo',    icon: '🖼️', label: 'Photo quality',  hint: 'HD vs space' },
   { id: 'contact',  icon: '📬', label: 'Contact info',    hint: 'Emails & phone' },
   { id: 'flags',    icon: '🚩', label: 'Red flag rules',  hint: 'What to detect' },
@@ -74,6 +75,7 @@ export default function SettingsPage() {
       setSettings({
         contact: {}, redFlags: {}, project: {}, forms: [],
         pipe: { insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0 },
+        security: { adminPasswords: [] },
         reading: {
           target: 2, periodLabel: 'week', periodDays: 7,
           photoMaxPx: 1600, photoQuality: 0.85,
@@ -88,6 +90,7 @@ export default function SettingsPage() {
           insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0,
           ...(data.settings.pipe || {}),
         },
+        security: { adminPasswords: [], ...(data.settings.security || {}) },
         reading: {
           target: 2, periodLabel: 'week', periodDays: 7,
           photoMaxPx: 1600, photoQuality: 0.85,
@@ -124,6 +127,7 @@ export default function SettingsPage() {
   function updateContact(k, v) { setS({ ...settings, contact: { ...settings.contact, [k]: v } }); }
   function updateFlag(k, v) { setS({ ...settings, redFlags: { ...settings.redFlags, [k]: v } }); }
   function updatePipe(k, v) { setS({ ...settings, pipe: { ...(settings.pipe || {}), [k]: v } }); }
+  function updateSecurity(list) { setS({ ...settings, security: { ...(settings.security || {}), adminPasswords: list } }); }
   function updateProject(k, v) { setS({ ...settings, project: { ...settings.project, [k]: v } }); }
 
   function addForm() {
@@ -289,6 +293,30 @@ export default function SettingsPage() {
           <p className="text-[11px] text-slate-500">Example: standard 150 with tolerance 0 means 140 or 160 raises <i>Outside height differs from the standard</i>. Set tolerance 10 to accept 140–160.</p>
         </div>
         <p className="text-[11px] text-slate-500">Clear any box to disable that check without touching the red-flag toggles.</p>
+      </Section>
+
+      {/* Admin passwords — change admin login without touching Vercel */}
+      <Section id="security" title="🔐 Admin passwords"
+        subtitle="Passwords that log someone in as an ADMIN. Surveyor passwords are managed per person in Assignment → Team.">
+        <div className="space-y-2">
+          {(settings.security?.adminPasswords || []).map((pw, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 w-16">Admin {i + 1}</span>
+              <input value={pw} onChange={(e) => updateSecurity((settings.security?.adminPasswords || []).map((x, j) => j === i ? e.target.value : x))}
+                placeholder="At least 4 characters" className="input flex-1 font-mono"/>
+              <button onClick={() => updateSecurity((settings.security?.adminPasswords || []).filter((_, j) => j !== i))} className="text-red-600 text-sm px-1">🗑️</button>
+            </div>
+          ))}
+          <button onClick={() => updateSecurity([...(settings.security?.adminPasswords || []), ''])}
+            className="w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-600 hover:border-brand-500 text-sm">
+            + Add admin password
+          </button>
+        </div>
+        <div className="text-xs text-slate-500 space-y-1 mt-2">
+          <p>• If this list has at least one password, it <b>replaces</b> the <span className="font-mono">ADMIN_PASSWORD</span> env var on Vercel. Leave it empty to keep using the env var.</p>
+          <p>• Each password = one admin (Admin 1, Admin 2…), matching the profile order in <span className="font-mono">adminProfiles</span>.</p>
+          <p>• ⚠️ After saving a change to your own password you will be logged out — log back in with the new one. Passwords shorter than 4 characters are ignored.</p>
+        </div>
       </Section>
 
       {/* Photo quality */}

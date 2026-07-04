@@ -1,7 +1,7 @@
 import { fetchSubmissions } from '@/lib/kobo';
 import { filterSubmissionsForUser, applyUrlFilters } from '@/lib/filter';
 import { detectRedFlags } from '@/lib/redflags';
-import { toCsv, toJson } from '@/lib/export';
+import { toCsv, toJson, buildSummary } from '@/lib/export';
 
 export async function GET(request) {
   try {
@@ -28,7 +28,44 @@ export async function GET(request) {
       return new Response(body, {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
-          'Content-Disposition': `attachment; filename="water-meter-readings-${ts}.json"`,
+          'Content-Disposition': `attachment; filename="pipe-readings-${ts}.json"`,
+        },
+      });
+    }
+
+    if (format === 'xlsx') {
+      // Real Excel workbook: sheet 1 = data, sheet 2 = summary statistics
+      // (totals, averages, min/max, per-village breakdown) about this data.
+      const XLSX = await import('xlsx');
+      const { toJson: rowsOf } = await import('@/lib/export');
+      const rows = rowsOf(subs);
+      const wb = XLSX.utils.book_new();
+      const dataSheet = XLSX.utils.json_to_sheet(rows.map((r) => ({
+        'Submission ID': r.id, 'Submitted At': r.time, 'Village': r.village,
+        'Pipe ID': r.serial, 'Water Level (mm)': r.reading,
+        'Outside Height (mm)': r.validation, 'Surveyor': r.surveyor,
+        'Form Date': r.date, 'Location': r.location,
+      })));
+      dataSheet['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 16 }, { wch: 12 }, { wch: 15 }, { wch: 17 }, { wch: 12 }, { wch: 11 }, { wch: 40 }];
+      XLSX.utils.book_append_sheet(wb, dataSheet, 'Readings');
+
+      const { overall, perVillage } = buildSummary(subs);
+      const summaryRows = [
+        ['PIPE READINGS — SUMMARY'], [],
+        ['Overall'], ...overall, [],
+        ['Per village'],
+        ['Village', 'Readings', 'Distinct pipes', 'Avg level (mm)', 'Lowest (mm)', 'Highest (mm)', 'Last reading'],
+        ...perVillage.map((v) => [v.village, v.readings, v.pipes, v.avg, v.min, v.max, v.last]),
+      ];
+      const sumSheet = XLSX.utils.aoa_to_sheet(summaryRows);
+      sumSheet['!cols'] = [{ wch: 24 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 13 }];
+      XLSX.utils.book_append_sheet(wb, sumSheet, 'Summary');
+
+      const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      return new Response(buf, {
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="pipe-readings-${ts}.xlsx"`,
         },
       });
     }
@@ -37,7 +74,7 @@ export async function GET(request) {
     return new Response(body, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="water-meter-readings-${ts}.csv"`,
+        'Content-Disposition': `attachment; filename="pipe-readings-${ts}.csv"`,
       },
     });
   } catch (e) {

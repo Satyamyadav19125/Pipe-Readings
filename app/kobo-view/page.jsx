@@ -85,6 +85,7 @@ export default async function KoboViewPage({ searchParams }) {
     // deduped by filename — shown in the detail modal.
     const seen = new Set();
     const photos = (s._attachments || []).filter((a) => {
+      if (a.is_deleted) return false;
       const key = a.media_file_basename || a.filename || a.download_url || '';
       if (seen.has(key)) return false;
       seen.add(key); return true;
@@ -92,8 +93,18 @@ export default async function KoboViewPage({ searchParams }) {
       url: `/api/photo?url=${encodeURIComponent(a.download_url)}`,
       label: labelFor(a),
     }));
+    // EVERY question the surveyor answered, in form order — internal Kobo
+    // bookkeeping keys are skipped. Shown in full in the detail modal.
+    const fields = Object.entries(s)
+      .filter(([k]) => !k.startsWith('_') && !k.startsWith('meta/') && !k.startsWith('formhub/') && k !== '__version__')
+      .map(([k, v]) => [
+        k.split('/').pop().replace(/_/g, ' '),
+        v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v)),
+      ]);
     return {
       photos,
+      fields,
+      validation: getField(s, 'validation'),
       id: s._id,
       validation: (s._validation_status && s._validation_status.label) || '',
       start: getField(s, 'startTime') || '',

@@ -8,9 +8,9 @@ import MissedPage from '../missed/page';
 // One tab that holds Assignments, Tasks and Missed readings (#16).
 // The old routes (/assignments, /tasks, /missed) still work for deep links.
 const TABS = [
-  { key: 'assignments', label: '👥 Assignments' },
+  { key: 'assignments', label: '👥 Team' },
   { key: 'tasks', label: '✅ Tasks' },
-  { key: 'missed', label: '📌 Missed readings' },
+  { key: 'missed', label: '📌 Assignment' },
 ];
 
 // If a tab crashes client-side (e.g. on a specific phone browser), show the
@@ -53,9 +53,10 @@ export default function TeamPage() {
       </div>
 
       <TabErrorBoundary>
+        {/* All three stay mounted — switching tabs is instant, no refetch. */}
         <div className={tab === 'assignments' ? '' : 'hidden'}><AssignmentsPage /></div>
-        {tab === 'tasks' && <TasksPage />}
-        {tab === 'missed' && <MissedPage />}
+        <div className={tab === 'tasks' ? '' : 'hidden'}><TasksPage /></div>
+        <div className={tab === 'missed' ? '' : 'hidden'}><MissedPage /></div>
       </TabErrorBoundary>
     </div>
   );

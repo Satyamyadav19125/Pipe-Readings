@@ -10,6 +10,7 @@ function isoDaysAgo(n) {
 export default function MissedPage() {
   const [user, setUser] = useState(undefined);
   const [date, setDate] = useState('');
+  const [week, setWeek] = useState('this'); // 'this' = current period status, 'last' = past periods
   const [periodDays, setPeriodDays] = useState(7);
   const [periodLabel, setPeriodLabel] = useState('week');
 
@@ -33,24 +34,25 @@ export default function MissedPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-xl font-semibold">📌 Missed readings</h2>
+        <h2 className="text-xl font-semibold">📌 Assignment — readings per village</h2>
         <p className="text-sm text-slate-500">
-          Meters that didn't hit their target in the selected {periodLabel}. Pick any date — you'll see the whole {periodLabel} containing it.
+          Done, left and total readings per village. Tap a village to see its pipes. "This {periodLabel}" shows live progress; past {periodLabel}s show what was missed.
         </p>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm p-3 flex items-center gap-2 flex-wrap">
         <label className="text-xs font-medium text-slate-600">📅 Show {periodLabel} of:</label>
-        <input type="date" value={date} max={isoDaysAgo(0)} onChange={(e) => setDate(e.target.value)}
+        <input type="date" value={date} max={isoDaysAgo(0)} onChange={(e) => { setWeek('last'); setDate(e.target.value); }}
           className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm" />
-        <div className="flex gap-1.5 ml-auto">
-          <QuickBtn active={!date} onClick={() => setDate('')}>Last {periodLabel}</QuickBtn>
-          <QuickBtn active={date === isoDaysAgo(step * 2)} onClick={() => setDate(isoDaysAgo(step * 2))}>2 {periodLabel}s ago</QuickBtn>
-          <QuickBtn active={date === isoDaysAgo(step * 3)} onClick={() => setDate(isoDaysAgo(step * 3))}>3 {periodLabel}s ago</QuickBtn>
+        <div className="flex gap-1.5 ml-auto flex-wrap">
+          <QuickBtn active={week === 'this'} onClick={() => { setWeek('this'); setDate(''); }}>This {periodLabel}</QuickBtn>
+          <QuickBtn active={week === 'last' && !date} onClick={() => { setWeek('last'); setDate(''); }}>Last {periodLabel}</QuickBtn>
+          <QuickBtn active={week === 'last' && date === isoDaysAgo(step * 2)} onClick={() => { setWeek('last'); setDate(isoDaysAgo(step * 2)); }}>2 {periodLabel}s ago</QuickBtn>
+          <QuickBtn active={week === 'last' && date === isoDaysAgo(step * 3)} onClick={() => { setWeek('last'); setDate(isoDaysAgo(step * 3)); }}>3 {periodLabel}s ago</QuickBtn>
         </div>
       </div>
 
-      <MeterStatusTable week="last" date={date} />
+      <MeterStatusTable week={week} date={week === 'this' ? '' : date} />
     </div>
   );
 }

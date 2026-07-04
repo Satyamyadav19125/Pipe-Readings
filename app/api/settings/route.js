@@ -23,6 +23,7 @@ export async function GET() {
     ...settings,
     forms: (settings.forms || []).map((f) => ({ ...f, token: undefined })),
     adminProfiles: undefined,
+    security: undefined,
   };
   return NextResponse.json({ settings: safe });
 }
@@ -47,6 +48,7 @@ export async function PUT(request) {
     project: { ...DEFAULT_SETTINGS.project, ...(body.project || {}) },
     forms: Array.isArray(body.forms) ? body.forms : [],
     pipe: { ...DEFAULT_SETTINGS.pipe, ...(existing.pipe || {}), ...(body.pipe || {}) },
+    security: { ...DEFAULT_SETTINGS.security, ...(existing.security || {}), ...(body.security || {}) },
     reading: { ...DEFAULT_SETTINGS.reading, ...(existing.reading || {}), ...(body.reading || {}) },
     adminProfiles: existing.adminProfiles || {},  // <-- preserve, never overwrite from this endpoint
   };
@@ -66,6 +68,15 @@ export async function PUT(request) {
     if (pp[k] === '' || pp[k] == null) { pp[k] = ''; continue; }
     const n = Number(pp[k]);
     pp[k] = Number.isFinite(n) ? Math.max(0, n) : '';
+  }
+
+  // Admin passwords: trimmed, deduped, max 10, each 4-100 chars. An empty
+  // list is allowed and means "use the ADMIN_PASSWORD env var".
+  {
+    const list = Array.isArray(merged.security.adminPasswords) ? merged.security.adminPasswords : [];
+    merged.security.adminPasswords = Array.from(new Set(
+      list.map((p) => String(p).trim()).filter((p) => p.length >= 4 && p.length <= 100)
+    )).slice(0, 10);
   }
 
   let foundActive = false;

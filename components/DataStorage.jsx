@@ -133,6 +133,7 @@ export default function DataStorage() {
           {months.map((m) => (
             <li key={m.from} className="py-2 flex items-center gap-2 flex-wrap">
               <span className="font-medium text-sm flex-1 min-w-[110px]">{m.label}</span>
+              <a className="dl-btn" href={`/api/export?format=xlsx&from=${m.from}&to=${m.to}`}>📗 XLSX</a>
               <a className="dl-btn" href={`/api/export?format=csv&from=${m.from}&to=${m.to}`}>📊 All CSV</a>
               <a className="dl-btn" href={`/api/export?format=csv&flag=flagged&from=${m.from}&to=${m.to}`}>🚩 Flags CSV</a>
               <a className="dl-btn" href={`/api/export-map?format=csv&from=${m.from}&to=${m.to}`}>🗺️ Map CSV</a>

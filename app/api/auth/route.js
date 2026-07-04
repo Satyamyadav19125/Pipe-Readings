@@ -21,7 +21,7 @@ export async function POST(request) {
     httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30,
   };
 
-  if (checkAdminPassword(password)) {
+  if (await checkAdminPassword(password)) {
     const res = NextResponse.json({ ok: true, role: 'admin' });
     res.cookies.set(ADMIN_COOKIE, password, cookieOpts);
     res.cookies.set(USER_COOKIE, '', { maxAge: 0, path: '/' });

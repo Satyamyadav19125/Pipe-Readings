@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PVC Pipe Readings — How the tool works</title>
+<style>
+  :root {
+    --bg: #0b1220; --card: #131c2e; --line: #2a3a55; --text: #e2e8f0;
+    --dim: #94a3b8; --green: #16a34a; --blue: #0284c7; --amber: #f59e0b; --rose: #f43f5e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 64px; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.5;
+  }
+  header { max-width: 900px; margin: 0 auto 20px; }
+  h1 { font-size: 1.45rem; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
+  h1 .pipeicon {
+    width: 34px; height: 34px; border-radius: 9px; flex: none;
+    background: linear-gradient(135deg, var(--green), var(--blue));
+    display: inline-flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  header p { color: var(--dim); font-size: .9rem; margin: 4px 0 0; }
+  .hint { color: var(--dim); font-size: .8rem; margin-top: 8px; }
+
+  .tree { max-width: 900px; margin: 0 auto; }
+  details {
+    border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+    margin: 8px 0; overflow: hidden;
+  }
+  details details { margin: 8px 10px; background: #0f1826; }
+  details details details { background: #0c1420; }
+  summary {
+    cursor: pointer; padding: 11px 14px; font-weight: 600; font-size: .95rem;
+    display: flex; align-items: center; gap: 10px; user-select: none; list-style: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸"; color: var(--dim); transition: transform .15s; flex: none; }
+  details[open] > summary::before { transform: rotate(90deg); }
+  summary .tag {
+    margin-left: auto; font-size: .68rem; font-weight: 500; color: var(--dim);
+    border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+  }
+  .leaf { padding: 4px 14px 12px 34px; font-size: .86rem; color: var(--dim); }
+  .leaf b, .leaf code { color: var(--text); }
+  .leaf code { background: #1c2a44; padding: 1px 5px; border-radius: 5px; font-size: .8rem; }
+  .leaf ul { margin: 6px 0 0; padding-left: 18px; }
+  .leaf li { margin: 3px 0; }
+  .dot { width: 9px; height: 9px; border-radius: 99px; display: inline-block; flex: none; }
+  .g { background: var(--green); } .b { background: var(--blue); }
+  .a { background: var(--amber); } .r { background: var(--rose); }
+  .arrow { text-align: center; color: var(--dim); font-size: 1.05rem; margin: -2px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="pipeicon">💧</span> PVC Pipe Readings — how the tool works</h1>
+  <p>Digital Village Project · Kharif 26 · AWD paddy irrigation monitoring across Punjab villages</p>
+  <p class="hint">Tap any branch to expand it — the tree goes from the field surveyor all the way down to what you see on screen.</p>
+</header>
+
+<div class="tree">
+
+<details open>
+  <summary><span class="dot g"></span>1 · Where the data is born — the field</summary>
+  <div class="leaf">A surveyor stands at a PVC observation pipe in a paddy field and opens the Kobo form on their phone.</div>
+  <details>
+    <summary>📋 The Kobo form: "Kharif 26 – PVC Pipes"</summary>
+    <div class="leaf">
+      Hosted on <code>kf.kobotoolbox.org</code>, asset UID <code>aytG3bjuzKg92S3QihTJ6J</code>. Questions the surveyor fills:
+      <ul>
+        <li><b>Date & start time</b> — when the visit happened</li>
+        <li><b>Name</b> — which surveyor (must match the Team list)</li>
+        <li><b>Village → Farm → Pipe</b> — cascading choice lists; ~1,188 pipes across all villages</li>
+        <li><b>Outside height (mm)</b> — pipe measured from ground to top; standard 150 mm</li>
+        <li><b>Water level inside (mm)</b> — tape lowered into the pipe; valid 50–250 mm</li>
+        <li><b>Photo of tape inside</b> + <b>field photo</b> — two pictures per visit</li>
+        <li><b>GPS location</b> — captured automatically at the pipe</li>
+      </ul>
+    </div>
+  </details>
+</details>
+
+<div class="arrow">⬇️</div>
+
+<details>
+  <summary><span class="dot b"></span>2 · How data reaches the dashboard</summary>
+  <details>
+    <summary>⚡ Webhook (instant path)</summary>
+    <div class="leaf">Kobo's <b>REST Services</b> is registered with the URL <code>https://pipe-readings-lac.vercel.app/api/webhook?secret=…</code>. Every time a form is submitted, Kobo POSTs there, and the dashboard clears its cache so the new reading appears within seconds. If this URL points at an old/deleted deployment, Kobo emails a <i>REST Services Failure Report</i> — the data is safe, only the instant ping fails.</div>
+  </details>
+  <details>
+    <summary>⏱️ 30-second cache (normal path)</summary>
+    <div class="leaf">Pages fetch submissions from the Kobo API (<code>/api/v2/assets/…/data/</code>) using the API token, through Next.js's Data Cache with a 30-second revalidation. So even without the webhook, the dashboard is never more than ~30 s behind.</div>
+  </details>
+  <details>
+    <summary>↻ Manual Refresh button</summary>
+    <div class="leaf">The header's Refresh calls <code>/api/refresh</code>, which busts the cache immediately — same effect as the webhook, triggered by hand.</div>
+  </details>
+  <details>
+    <summary>🧠 The form definition (master list)</summary>
+    <div class="leaf">Besides submissions, the tool also downloads the form's <b>choice lists</b> (every village, farm and pipe that exists). That's how it knows a pipe with <i>zero</i> submissions still exists — powering "95 / 1188 done" and the per-village to-take counts.</div>
+  </details>
+</details>
+
+<div class="arrow">⬇️</div>
+
+<details>
+  <summary><span class="dot b"></span>3 · Where things are stored</summary>
+  <details>
+    <summary>☁️ KoboToolbox (source of truth)</summary>
+    <div class="leaf">All readings and photos live on Kobo's servers. The dashboard never copies them into its own database — it reads them live (cached 30 s). Deleting the dashboard loses nothing.</div>
+  </details>
+  <details>
+    <summary>🍃 MongoDB Atlas — database <code>pipe_readings</code></summary>
+    <div class="leaf">Only the tool's own data lives here, isolated from the Water Meter app:
+      <ul>
+        <li><code>settings</code> — project info, red-flag toggles, pipe standards, Kobo forms, contact people, admin passwords</li>
+        <li><code>assignments</code> — surveyors, their villages, passwords, photos</li>
+        <li><code>messages</code> + <code>chat_reads</code> — team chat and unread tracking</li>
+        <li><code>tasks</code>, <code>media</code>, <code>verified</code> — to-dos, uploaded chat files, "mark as correct" flags</li>
+      </ul>
+    </div>
+  </details>
+  <details>
+    <summary>▲ Vercel (the app itself)</summary>
+    <div class="leaf">The Next.js app deployed from the GitHub repo. Every commit to <code>main</code> auto-deploys in ~1 minute. Environment variables hold the Mongo URI, Kobo token/UID, admin passwords fallback and webhook secret.</div>
+  </details>
+</details>
+
+<div class="arrow">⬇️</div>
+
+<details>
+  <summary><span class="dot a"></span>4 · The brain — what happens to every reading</summary>
+  <details>
+    <summary>🗺️ Field map (3-pass matcher)</summary>
+    <div class="leaf"><code>lib/fieldMap.js</code> translates Kobo's raw keys (<code>group_2/Readings_mm</code>) into logical names (reading, village, pipe, photo, GPS). It matches exact → case-insensitive → last-segment, so renaming a group in Kobo doesn't break the dashboard.</div>
+  </details>
+  <details>
+    <summary>🚩 Red-flag engine</summary>
+    <div class="leaf">Every submission is checked against the rules in <code>lib/redflags.js</code>:
+      <ul>
+        <li><b>Missing photo</b> — no picture attached</li>
+        <li><b>Stale 7 days</b> — a pipe's latest reading is older than a week</li>
+        <li><b>Inside out of range</b> — water level outside the 50–250 mm standard (Settings → Pipe parameters)</li>
+        <li><b>Outside differs from standard</b> — pipe height ≠ 150 mm (± tolerance) → sunk / lifted / wrong measurement</li>
+        <li>Stuck readings, future dates, out-of-sequence dates, plus opt-in GPS/duplicate/speed checks</li>
+      </ul>
+      Admins can toggle every rule and edit the standards in Settings; surveyors never see flags.</div>
+  </details>
+  <details>
+    <summary>📈 Weekly targets</summary>
+    <div class="leaf"><code>lib/weekly.js</code> groups readings per pipe per period (default: 1 reading / week) and classifies each pipe as <b>done</b>, <b>in progress</b> or <b>needs reading</b> — merged with the master list so never-read pipes count too.</div>
+  </details>
+</details>
+
+<div class="arrow">⬇️</div>
+
+<details>
+  <summary><span class="dot g"></span>5 · What you see — every tab explained</summary>
+  <details><summary>🏠 Overview</summary><div class="leaf">KPIs: total submissions, this-week progress <b>out of all 1,188 pipes</b>, villages, surveyors, flags. Surveyors see only their own villages.</div></details>
+  <details><summary>📋 Submissions</summary><div class="leaf">Every reading as a card — water level (mm), both photos labeled, flag details, "mark as correct" for admins, filters by village/surveyor/date/flag.</div></details>
+  <details><summary>💧 Water level</summary><div class="leaf">Per-pipe pairs of consecutive readings showing how the level moved between visits (rise and fall are both normal in AWD — never flagged).</div></details>
+  <details><summary>🗺️ Map</summary><div class="leaf">Every GPS-tagged reading as a pin — blue clean, red flagged. Street/Satellite/Topo layers with automatic fallback if street tiles fail, heat-map mode, pin popups with the full submission info, KML/GeoJSON/HTML export for your own cartography.</div></details>
+  <details><summary>👥 Assignment (3 sub-tabs)</summary><div class="leaf"><b>Team</b> — people, passwords, photos and village assignments. <b>Tasks</b> — to-dos. <b>Assignment</b> — done / left / total readings per village, collapsible per village, for this week or any past week.</div></details>
+  <details><summary>💬 Chat</summary><div class="leaf">Group + per-surveyor DMs. Photos (camera or gallery), voice notes, documents, location and live location. Unread badges on the tab and per room, browser notifications on new messages.</div></details>
+  <details><summary>🪞 Kobo View (admin)</summary><div class="leaf">Spreadsheet of raw submissions — every answered question, both photos, mini map with the pin, deep link to open that exact submission on the real KoboToolbox site.</div></details>
+  <details><summary>⚙️ Settings (admin)</summary><div class="leaf">Kobo forms (active UID shown), project info, reading targets, pipe standards, photo quality, contact people for the landing page, red-flag toggles, admin passwords, data & storage with XLSX/CSV/flag/map downloads per month.</div></details>
+</details>
+
+<div class="arrow">⬇️</div>
+
+<details>
+  <summary><span class="dot r"></span>6 · Getting data back out</summary>
+  <details><summary>📗 Excel (XLSX)</summary><div class="leaf">Two sheets: <b>Readings</b> (all rows) and <b>Summary</b> — totals, averages, min/max water level, per-village readings/pipes/last-reading table.</div></details>
+  <details><summary>📊 CSV / JSON</summary><div class="leaf">Same rows for scripts, R, Python or Google Sheets.</div></details>
+  <details><summary>🗺️ Map files</summary><div class="leaf">KML (Google Earth), GeoJSON (QGIS/ArcGIS) and a standalone HTML map — ready for the project's cartographic outputs.</div></details>
+</details>
+
+<details>
+  <summary><span class="dot r"></span>7 · Who can see what</summary>
+  <div class="leaf">
+    <b>Admins</b> (passwords in Settings → Admin passwords, or the <code>ADMIN_PASSWORD</code> env var) see everything.<br>
+    <b>Surveyors</b> (password set per person in Assignment → Team) see only their villages, no flags, no Kobo View, no Settings — a clean, positive field view.
+  </div>
+</details>
+
+</div>
+</body>
+</html>

@@ -49,6 +49,24 @@ function loadScript(id, src) {
 // control above the map and a "View submission" link in each popup.
 // Surveyors don't — every pin is plain blue, the strip is hidden, and the
 // admin-only "View submission" link is hidden too.
+
+// If openstreetmap.org tiles fail repeatedly (blocked network, outage), swap
+// the street layer to Carto Voyager so the map never stays blank.
+function attachStreetFallback(L, map, tileLayerRef) {
+  const t = tileLayerRef.current;
+  if (!t || !t._url || !t._url.includes('openstreetmap.org')) return;
+  let errors = 0;
+  t.on('tileerror', () => {
+    errors += 1;
+    if (errors === 4 && map.hasLayer(t)) {
+      map.removeLayer(t);
+      tileLayerRef.current = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19, attribution: '© OpenStreetMap © CARTO',
+      }).addTo(map);
+    }
+  });
+}
+
 export default function MapView({ points = [], showFlagFilter = true }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -82,6 +100,11 @@ export default function MapView({ points = [], showFlagFilter = true }) {
         mapRef.current = map;
         const conf = TILE_LAYERS[layer];
         tileLayerRef.current = L.tileLayer(conf.url, { maxZoom: 19, attribution: conf.attribution }).addTo(map);
+        attachStreetFallback(L, map, tileLayerRef);
+        // Container size can settle after fonts/layout — recalc so tiles
+        // actually draw instead of leaving a blank map.
+        setTimeout(() => { try { map.invalidateSize(); } catch {} }, 300);
+        setTimeout(() => { try { map.invalidateSize(); } catch {} }, 1200);
 
         const redIcon = pinIcon(L, 'red');
         const blueIcon = pinIcon(L, 'blue');
@@ -110,8 +133,12 @@ export default function MapView({ points = [], showFlagFilter = true }) {
               <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">${new Date(p.time).toLocaleString()}</div>
               <table style="width: 100%; font-size: 12px;">
                 <tr><td style="color:#64748b;padding:1px 0;">Pipe</td><td style="font-family:monospace;">${escapeHtml(p.serial)}</td></tr>
-                <tr><td style="color:#64748b;padding:1px 0;">Reading</td><td style="font-weight:600;">${escapeHtml(p.reading)}</td></tr>
+                <tr><td style="color:#64748b;padding:1px 0;">Water level</td><td style="font-weight:600;">${escapeHtml(p.reading)} mm</td></tr>
+                <tr><td style="color:#64748b;padding:1px 0;">Outside height</td><td>${escapeHtml(p.validation ?? '—')} mm</td></tr>
+                <tr><td style="color:#64748b;padding:1px 0;">Form date</td><td>${escapeHtml(p.date ?? '—')}</td></tr>
                 <tr><td style="color:#64748b;padding:1px 0;">Surveyor</td><td>${escapeHtml(p.surveyor)}</td></tr>
+                <tr><td style="color:#64748b;padding:1px 0;">Photos</td><td>${escapeHtml(String(p.photoCount ?? 0))} 📷</td></tr>
+                <tr><td style="color:#64748b;padding:1px 0;">GPS</td><td style="font-family:monospace;font-size:11px;">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</td></tr>
               </table>
               ${flagHtml}
               <div style="margin-top: 8px; display:flex; gap:6px; flex-wrap:wrap;">
@@ -170,6 +197,7 @@ export default function MapView({ points = [], showFlagFilter = true }) {
     if (tileLayerRef.current) mapRef.current.removeLayer(tileLayerRef.current);
     const conf = TILE_LAYERS[layer];
     tileLayerRef.current = L.tileLayer(conf.url, { maxZoom: 19, attribution: conf.attribution }).addTo(mapRef.current);
+    attachStreetFallback(L, mapRef.current, tileLayerRef);
   }, [layer]);
 
   function goToMyLocation() {
