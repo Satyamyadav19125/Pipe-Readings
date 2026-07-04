@@ -74,31 +74,59 @@ export default async function Landing() {
       </section>
 
       {/* Contact */}
-      {contact?.showOnLanding && (contact?.showEmails || contact?.showPhone) && (
+      {contact?.showOnLanding && (
         <section className="bg-white rounded-2xl shadow p-6 sm:p-8">
           <h2 className="text-xl font-bold mb-3 flex items-center gap-2">
             <span className="text-2xl">📬</span> Get in touch
           </h2>
-          <div className="space-y-2 text-sm">
-            {contact.showEmails && contact.leadEmail && (
-              <p>
-                <span className="text-slate-500 inline-block w-36">Lead Researcher:</span>
-                <a href={`mailto:${contact.leadEmail}`} className="text-brand-600 hover:underline">{contact.leadEmail}</a>
-              </p>
-            )}
-            {contact.showEmails && contact.adminEmail && (
-              <p>
-                <span className="text-slate-500 inline-block w-36">Research Assistant:</span>
-                <a href={`mailto:${contact.adminEmail}`} className="text-brand-600 hover:underline">{contact.adminEmail}</a>
-              </p>
-            )}
-            {contact.showPhone && contact.adminPhone && (
-              <p>
-                <span className="text-slate-500 inline-block w-32">Phone:</span>
-                <a href={`tel:${contact.adminPhone}`} className="text-brand-600 hover:underline">{contact.adminPhone}</a>
-              </p>
-            )}
-          </div>
+          {Array.isArray(contact.people) && contact.people.filter((p) => p.name).length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {contact.people.filter((p) => p.name).map((p, i) => (
+                <div key={i} className="border border-slate-200 rounded-xl p-4">
+                  <div className="font-semibold">{p.name}</div>
+                  {p.designation && <div className="text-xs text-brand-700 font-medium mb-1.5">{p.designation}</div>}
+                  <div className="space-y-1 text-sm">
+                    {contact.showPhone !== false && p.phone && (
+                      <p>📞 <a href={`tel:${p.phone}`} className="text-brand-600 hover:underline">{p.phone}</a></p>
+                    )}
+                    {contact.showEmails !== false && p.email && (
+                      <p>✉️ <a href={`mailto:${p.email}`} className="text-brand-600 hover:underline break-all">{p.email}</a></p>
+                    )}
+                    {p.whatsapp && (
+                      <p>💬 <a href={`https://wa.me/${String(p.whatsapp).replace(/[^\d]/g, '')}`} target="_blank" rel="noreferrer" className="text-field-700 hover:underline">WhatsApp</a></p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2 text-sm">
+              {contact.showEmails && contact.leadEmail && (
+                <p>
+                  <span className="text-slate-500 inline-block w-36">Lead Researcher:</span>
+                  <a href={`mailto:${contact.leadEmail}`} className="text-brand-600 hover:underline">{contact.leadEmail}</a>
+                </p>
+              )}
+              {contact.showEmails && contact.adminEmail && (
+                <p>
+                  <span className="text-slate-500 inline-block w-36">Research Assistant:</span>
+                  <a href={`mailto:${contact.adminEmail}`} className="text-brand-600 hover:underline">{contact.adminEmail}</a>
+                </p>
+              )}
+              {contact.showPhone && contact.adminPhone && (
+                <p>
+                  <span className="text-slate-500 inline-block w-32">Phone:</span>
+                  <a href={`tel:${contact.adminPhone}`} className="text-brand-600 hover:underline">{contact.adminPhone}</a>
+                </p>
+              )}
+              {contact.showPhone && contact.adminWhatsapp && (
+                <p>
+                  <span className="text-slate-500 inline-block w-32">WhatsApp:</span>
+                  <a href={`https://wa.me/${String(contact.adminWhatsapp).replace(/[^\d]/g, '')}`} target="_blank" rel="noreferrer" className="text-field-700 hover:underline">{contact.adminWhatsapp}</a>
+                </p>
+              )}
+            </div>
+          )}
         </section>
       )}
     </div>

@@ -1,5 +1,7 @@
 'use client';
 
+import MiniMap from '@/components/MiniMap';
+
 import { useMemo, useState } from 'react';
 
 // `mobile: false` columns are hidden on phones so the table fits the screen
@@ -138,10 +140,17 @@ export default function KoboTable({ rows }) {
               <button onClick={() => setDetail(null)} className="text-white/90 text-xl leading-none">×</button>
             </div>
             <div className="p-4 space-y-2 text-sm">
-              {detail.photo && (
-                <button onClick={() => setLightbox(detail.photo)} className="block w-full">
-                  <img src={detail.photo} alt="pipe reading" className="w-full rounded-lg border border-slate-200 mb-2 cursor-zoom-in" />
-                </button>
+              {(detail.photos?.length ? detail.photos : (detail.photo ? [{ url: detail.photo, label: 'Photo' }] : [])).length > 0 && (
+                <div className={`grid ${((detail.photos?.length || 1) > 1) ? 'grid-cols-2' : 'grid-cols-1'} gap-2 mb-2`}>
+                  {(detail.photos?.length ? detail.photos : [{ url: detail.photo, label: 'Photo' }]).map((p, i) => (
+                    <figure key={i} className="m-0">
+                      <button onClick={() => setLightbox(p.url)} className="block w-full">
+                        <img src={p.url} alt={p.label} className="w-full h-36 object-cover rounded-lg border border-slate-200 cursor-zoom-in" />
+                      </button>
+                      <figcaption className="text-[10px] text-slate-500 mt-0.5 text-center">{p.label}</figcaption>
+                    </figure>
+                  ))}
+                </div>
               )}
               <Row k="Surveyor" v={detail.surveyor} />
               <Row k="Village" v={detail.village} />
@@ -153,10 +162,19 @@ export default function KoboTable({ rows }) {
               <Row k="End" v={detail.end} />
               <Row k="GPS" v={detail.gps} mono />
               <Row k="Submitted" v={detail.submitted} />
-              {detail.lat && (
-                <a target="_blank" rel="noreferrer" href={`https://www.google.com/maps/dir/?api=1&destination=${detail.lat},${detail.lng}`}
-                  className="inline-block mt-2 px-3 py-2 bg-field-600 text-white rounded-lg text-xs">🧭 Directions to this pipe</a>
+              {detail.lat != null && detail.lng != null && (
+                <div className="pt-1">
+                  <MiniMap lat={detail.lat} lng={detail.lng} label={detail.meter || detail.village} />
+                </div>
               )}
+              <div className="flex flex-wrap gap-2 mt-2">
+                {detail.lat && (
+                  <a target="_blank" rel="noreferrer" href={`https://www.google.com/maps/dir/?api=1&destination=${detail.lat},${detail.lng}`}
+                    className="inline-block px-3 py-2 bg-field-600 text-white rounded-lg text-xs">🧭 Directions to this pipe</a>
+                )}
+                <a target="_blank" rel="noreferrer" href={`/api/kobo-open?id=${detail.id}`}
+                  className="inline-block px-3 py-2 bg-brand-600 text-white rounded-lg text-xs">🔗 Open in KoboToolbox ↗</a>
+              </div>
             </div>
           </div>
         </div>

@@ -13,7 +13,7 @@ const baseLinks = [
   { href: '/submissions', label: 'Submissions', icon: '📋' },
   { href: '/usage', label: 'Water level', icon: '💧' },
   { href: '/map', label: 'Map', icon: '🗺️' },
-  { href: '/team', label: 'Team', icon: '👥' },
+  { href: '/team', label: 'Assignment', icon: '👥' },
   { href: '/chat', label: 'Chat', icon: '💬' },
 ];
 

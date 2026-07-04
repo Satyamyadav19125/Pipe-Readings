@@ -11,7 +11,7 @@ const FLAG_LABELS = {
   future_date: 'Future-dated reading',
   out_of_sequence: 'Reading date earlier than the previous one',
   inside_out_of_range: 'Inside reading outside the valid range (see Pipe parameters)',
-  outside_out_of_range: 'Outside height outside the expected band (see Pipe parameters)',
+  outside_out_of_range: 'Outside height differs from the standard (see Pipe parameters)',
   // Opt-in extras (off by default)
   duplicate_same_day: 'Same pipe read twice in one day',
   gps_outlier: "GPS far from this pipe's usual spot",
@@ -43,6 +43,7 @@ export default function SettingsPage() {
   const [error, setError] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [flagSearch, setFlagSearch] = useState('');
+  const [activeForm, setActiveForm] = useState(null);
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const dirtyRef = useRef(false);
 
@@ -72,7 +73,7 @@ export default function SettingsPage() {
       // Fill them with safe defaults so the page never crashes on access.
       setSettings({
         contact: {}, redFlags: {}, project: {}, forms: [],
-        pipe: { maxInsideMm: 400, outsideMinMm: 100, outsideMaxMm: 300 },
+        pipe: { insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0 },
         reading: {
           target: 2, periodLabel: 'week', periodDays: 7,
           photoMaxPx: 1600, photoQuality: 0.85,
@@ -84,7 +85,7 @@ export default function SettingsPage() {
         project: { ...(data.settings.project || {}) },
         forms: Array.isArray(data.settings.forms) ? data.settings.forms : [],
         pipe: {
-          maxInsideMm: 400, outsideMinMm: 100, outsideMaxMm: 300,
+          insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0,
           ...(data.settings.pipe || {}),
         },
         reading: {
@@ -94,6 +95,7 @@ export default function SettingsPage() {
           ...(data.settings.reading || {}),
         },
       });
+      setActiveForm(data.activeForm || null);
       setDirty(false);
       dirtyRef.current = false;
     } else {
@@ -202,6 +204,14 @@ export default function SettingsPage() {
       {/* Kobo forms — moved to top: the most important admin action */}
       <Section id="forms" title="📋 Kobo forms" subtitle="Switch between seasonal forms (Kharif, Rabi, etc). Mark exactly one as active.">
         <div className="space-y-3">
+          {activeForm && (
+            <div className="bg-brand-50 border border-brand-200 rounded-lg p-2.5 text-xs space-y-0.5">
+              <div className="font-semibold text-brand-900">🔗 Currently active form</div>
+              <div className="text-slate-600">Name: <b>{activeForm.name}</b></div>
+              <div className="text-slate-600">Server: <span className="font-mono">{activeForm.baseUrl}</span></div>
+              <div className="text-slate-600">Unique ID (asset UID): <span className="font-mono select-all bg-white/70 px-1 rounded border border-brand-100">{activeForm.assetUid || '—'}</span></div>
+            </div>
+          )}
           {(settings.forms || []).length === 0 && (
             <p className="text-xs text-slate-500 italic">No forms saved yet — using env vars as default. Add a form below to override.</p>
           )}
@@ -247,28 +257,38 @@ export default function SettingsPage() {
         <ReadingTargets settings={settings} setSettings={setS} />
       </Section>
 
-      {/* Pipe parameters — physical mm ranges used by the range red flags */}
+      {/* Pipe parameters — standards for the two measurement questions */}
       <Section id="pipe" title="📏 Pipe parameters"
-        subtitle="Physical limits of the observation pipes, in millimetres. Readings outside these ranges get red-flagged.">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Field label="Max inside reading (mm)">
-            <input type="number" min="0" value={settings.pipe?.maxInsideMm ?? ''} placeholder="400"
-              onChange={(e) => updatePipe('maxInsideMm', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
-          </Field>
-          <Field label="Outside height — minimum (mm)">
-            <input type="number" min="0" value={settings.pipe?.outsideMinMm ?? ''} placeholder="100"
-              onChange={(e) => updatePipe('outsideMinMm', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
-          </Field>
-          <Field label="Outside height — maximum (mm)">
-            <input type="number" min="0" value={settings.pipe?.outsideMaxMm ?? ''} placeholder="300"
-              onChange={(e) => updatePipe('outsideMaxMm', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
-          </Field>
+        subtitle="Standards for the two measurement questions on the Kobo form, in millimetres. Answers outside these standards get red-flagged.">
+        <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+          <div className="text-xs font-semibold text-slate-700">💧 "Measure water level inside the PVC pipe — millimeter mm"</div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Valid from (mm)">
+              <input type="number" min="0" value={settings.pipe?.insideMinMm ?? ''} placeholder="50"
+                onChange={(e) => updatePipe('insideMinMm', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
+            </Field>
+            <Field label="Valid to (mm)">
+              <input type="number" min="0" value={settings.pipe?.insideMaxMm ?? ''} placeholder="250"
+                onChange={(e) => updatePipe('insideMaxMm', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
+            </Field>
+          </div>
+          <p className="text-[11px] text-slate-500">Example: 50–250 means a water level of 40 or 260 raises <i>Inside reading outside the valid range</i>.</p>
         </div>
-        <div className="text-xs text-slate-500 space-y-1 mt-2">
-          <p>• <b>Max inside reading</b> — the deepest water level physically possible inside the pipe. Anything above it (or below 0) flags as <i>Inside reading outside the valid range</i>.</p>
-          <p>• <b>Outside height band</b> — how far the pipe should stick out of the soil. A measurement outside this band flags as <i>Outside height outside the expected band</i> (pipe sunk, lifted, or re-installed).</p>
-          <p>• Clear a box to disable that check without touching the red-flag toggles.</p>
+        <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+          <div className="text-xs font-semibold text-slate-700">📐 "Measure the pipe from the outside, from ground level to top of the pipe — millimeter mm"</div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Standard value (mm)">
+              <input type="number" min="0" value={settings.pipe?.outsideStandardMm ?? ''} placeholder="150"
+                onChange={(e) => updatePipe('outsideStandardMm', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
+            </Field>
+            <Field label="Allowed tolerance ± (mm)">
+              <input type="number" min="0" value={settings.pipe?.outsideToleranceMm ?? ''} placeholder="0"
+                onChange={(e) => updatePipe('outsideToleranceMm', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
+            </Field>
+          </div>
+          <p className="text-[11px] text-slate-500">Example: standard 150 with tolerance 0 means 140 or 160 raises <i>Outside height differs from the standard</i>. Set tolerance 10 to accept 140–160.</p>
         </div>
+        <p className="text-[11px] text-slate-500">Clear any box to disable that check without touching the red-flag toggles.</p>
       </Section>
 
       {/* Photo quality */}
@@ -289,6 +309,33 @@ export default function SettingsPage() {
           <Toggle label="Show phone" checked={settings.contact.showPhone} onChange={(v) => updateContact('showPhone', v)}/>
           <Toggle label="Show on landing page" checked={settings.contact.showOnLanding} onChange={(v) => updateContact('showOnLanding', v)}/>
           <Toggle label="Show in footer" checked={settings.contact.showInFooter} onChange={(v) => updateContact('showInFooter', v)}/>
+        </div>
+
+        {/* People shown on the landing page — each with a designation */}
+        <div className="mt-4 border-t border-slate-100 pt-3">
+          <div className="text-sm font-medium text-slate-700 mb-1">👥 People on the landing page</div>
+          <p className="text-xs text-slate-500 mb-2">Add as many people as you want — name, designation, and contact details. They appear in "Get in touch" on the landing page in this order. If this list is empty, the two email/phone fields above are shown instead.</p>
+          <div className="space-y-2">
+            {(settings.contact.people || []).map((person, i) => (
+              <div key={i} className="border border-slate-200 rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-slate-500">Person {i + 1}</span>
+                  <button onClick={() => updateContact('people', (settings.contact.people || []).filter((_, j) => j !== i))} className="text-red-600 text-sm">🗑️</button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input value={person.name || ''} onChange={(e) => updateContact('people', (settings.contact.people || []).map((x, j) => j === i ? { ...x, name: e.target.value } : x))} placeholder="Name (e.g. Satyam Yadav)" className="input"/>
+                  <input value={person.designation || ''} onChange={(e) => updateContact('people', (settings.contact.people || []).map((x, j) => j === i ? { ...x, designation: e.target.value } : x))} placeholder="Designation (e.g. Lead Research Assistant)" className="input"/>
+                  <input value={person.phone || ''} onChange={(e) => updateContact('people', (settings.contact.people || []).map((x, j) => j === i ? { ...x, phone: e.target.value } : x))} placeholder="Phone (optional)" className="input"/>
+                  <input value={person.email || ''} onChange={(e) => updateContact('people', (settings.contact.people || []).map((x, j) => j === i ? { ...x, email: e.target.value } : x))} placeholder="Email (optional)" className="input"/>
+                  <input value={person.whatsapp || ''} onChange={(e) => updateContact('people', (settings.contact.people || []).map((x, j) => j === i ? { ...x, whatsapp: e.target.value } : x))} placeholder="WhatsApp with country code (optional)" className="input sm:col-span-2"/>
+                </div>
+              </div>
+            ))}
+            <button onClick={() => updateContact('people', [...(settings.contact.people || []), { name: '', designation: '', phone: '', email: '', whatsapp: '' }])}
+              className="w-full py-2.5 border-2 border-dashed border-slate-300 rounded-lg text-slate-600 hover:border-brand-500 text-sm">
+              + Add person
+            </button>
+          </div>
         </div>
       </Section>
 

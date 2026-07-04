@@ -163,7 +163,7 @@ export default async function HomePage() {
         <QuickLink href="/map" icon="🗺️" label="Map" />
         {isAdmin
           ? <QuickLink href="/kobo-view" icon="🪞" label="Kobo data" />
-          : <QuickLink href="/team" icon="👥" label="My team" />}
+          : <QuickLink href="/team" icon="👥" label="Assignment" />}
       </div>
 
       {/* Charts — only admins see quality donut + per-surveyor bars */}

@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { fetchSubmissions, findAttachmentUrl } from '@/lib/kobo';
+import { getActiveForm } from '@/lib/db';
 import { filterSubmissionsForUser, applyUrlFilters } from '@/lib/filter';
 import { getField } from '@/lib/fieldMap';
 import { isAdmin } from '@/lib/auth';
@@ -45,6 +46,12 @@ export default async function KoboViewPage({ searchParams }) {
   }
 
   const sp = (await searchParams) || {};
+  // Direct link to this form's data table on the real KoboToolbox site.
+  let koboUrl = null;
+  try {
+    const f = await getActiveForm();
+    if (f?.assetUid) koboUrl = `${(f.baseUrl || 'https://kf.kobotoolbox.org').replace(/\/$/, '')}/#/forms/${f.assetUid}/data/table`;
+  } catch { /* env not configured */ }
   let submissions = [];
   let error = null;
   try { submissions = await fetchSubmissions(); }
@@ -57,6 +64,12 @@ export default async function KoboViewPage({ searchParams }) {
 
   const sorted = [...submissions].sort((a, b) => new Date(b._submission_time).getTime() - new Date(a._submission_time).getTime());
 
+  const labelFor = (a) => {
+    const q = String(a.question_xpath || a.filename || '').toLowerCase();
+    if (q.includes('photo_reading')) return 'Reading photo';
+    if (q.includes('field_photo')) return 'Field photo';
+    return 'Photo';
+  };
   const rows = sorted.map((s) => {
     const locRaw = getField(s, 'location');
     const { lat, lng } = latlng(locRaw, s._geolocation);
@@ -68,7 +81,19 @@ export default async function KoboViewPage({ searchParams }) {
     } else if (s._attachments?.[0]?.download_url) {
       photo = `/api/photo?url=${encodeURIComponent(s._attachments[0].download_url)}`;
     }
+    // ALL photos on the submission (reading close-up + field shot), labeled,
+    // deduped by filename — shown in the detail modal.
+    const seen = new Set();
+    const photos = (s._attachments || []).filter((a) => {
+      const key = a.media_file_basename || a.filename || a.download_url || '';
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    }).map((a) => ({
+      url: `/api/photo?url=${encodeURIComponent(a.download_url)}`,
+      label: labelFor(a),
+    }));
     return {
+      photos,
       id: s._id,
       validation: (s._validation_status && s._validation_status.label) || '',
       start: getField(s, 'startTime') || '',
@@ -93,9 +118,17 @@ export default async function KoboViewPage({ searchParams }) {
           <h2 className="text-xl font-semibold">🪞 Kobo Data View</h2>
           <p className="text-sm text-slate-500">Spreadsheet view of all submissions, like the KoboToolbox table. Search any column, tap a row number to expand. {rows.length.toLocaleString()} rows shown.</p>
         </div>
-        <Suspense fallback={<div className="h-9 w-24 bg-slate-200 rounded animate-pulse" />}>
-          <ExportButton />
-        </Suspense>
+        <div className="flex items-center gap-2">
+          {koboUrl && (
+            <a href={koboUrl} target="_blank" rel="noreferrer"
+              className="px-3 py-2 text-xs sm:text-sm rounded-lg border border-brand-300 text-brand-700 hover:bg-brand-50 font-medium whitespace-nowrap">
+              🔗 Open in KoboToolbox ↗
+            </a>
+          )}
+          <Suspense fallback={<div className="h-9 w-24 bg-slate-200 rounded animate-pulse" />}>
+            <ExportButton />
+          </Suspense>
+        </div>
       </div>
 
       <Suspense fallback={<div className="h-12 bg-slate-100 rounded-lg animate-pulse" />}>

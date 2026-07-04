@@ -121,7 +121,7 @@ export default function DataStorage() {
           ))}
         </ul>
         <p className="text-[11px] text-slate-400 mt-3">
-          Your meter <b>readings are stored in KoboToolbox</b>, not here — this database only holds app data (photos, chat, tasks, settings). Deleting things here never deletes any reading.
+          Your pipe <b>readings are stored in KoboToolbox</b>, not here — this database only holds app data (photos, chat, tasks, settings). Deleting things here never deletes any reading.
         </p>
       </div>
 
@@ -169,6 +169,8 @@ export default function DataStorage() {
           border: 1px solid #cbd5e1; background: white; white-space: nowrap;
         }
         :global(.dl-btn:hover) { background: #f8fafc; }
+        :global(.dark .dl-btn) { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+        :global(.dark .dl-btn:hover) { background: #2b3a55; }
       `}</style>
     </div>
   );

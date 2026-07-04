@@ -23,6 +23,7 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('todo'); // todo | all | done
   const [q, setQ] = useState('');
+  const [openVillages, setOpenVillages] = useState({}); // village -> bool (collapsed by default)
 
   useEffect(() => {
     let alive = true;
@@ -130,16 +131,24 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
         <div className="bg-white rounded-xl shadow-sm p-6 text-center text-emerald-700 text-sm">
           {pastWeek ? '🎉 Nothing was missed — every pipe hit its target!' : `🎉 Nothing left to do — every pipe has been read ${target} time${target === 1 ? '' : 's'} this ${periodLabel}!`}
         </div>
-      ) : villages.map((v) => (
+      ) : villages.map((v) => {
+        const isOpen = !!openVillages[v.village] || !!q; // searching auto-expands
+        return (
         <div key={v.village} className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50 flex items-center justify-between gap-2">
-            <div className="font-semibold text-sm flex items-center gap-2">🏘️ {v.village}</div>
-            <div className="text-xs text-slate-500">
-              {pastWeek
-                ? <span className="text-rose-600 font-medium">{v.partial + v.pending} missed</span>
-                : <span className="text-emerald-600 font-medium">{v.done} done</span>} · {v.total} pipes
+          <button type="button"
+            onClick={() => setOpenVillages((o) => ({ ...o, [v.village]: !o[v.village] }))}
+            className="w-full px-4 py-2.5 border-b border-slate-100 bg-slate-50 flex items-center justify-between gap-2 text-left hover:bg-slate-100 transition">
+            <div className="font-semibold text-sm flex items-center gap-2">
+              <span className="text-slate-400 text-xs">{isOpen ? '▼' : '▶'}</span> 🏘️ {v.village}
             </div>
-          </div>
+            <div className="text-xs text-slate-500 flex items-center gap-2 flex-wrap justify-end">
+              <span className="text-emerald-600 font-medium">{v.done} taken</span>
+              {v.partial > 0 && <span className="text-amber-600 font-medium">{v.partial} partial</span>}
+              <span className={`${v.pending > 0 ? 'text-rose-600' : 'text-slate-400'} font-medium`}>{v.pending} to take</span>
+              <span>· {v.total} pipes</span>
+            </div>
+          </button>
+          {isOpen && (
           <ul className="divide-y divide-slate-100">
             {v.shownMeters.map((m) => {
               const st = STATUS[m.status];
@@ -162,8 +171,9 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
               );
             })}
           </ul>
+          )}
         </div>
-      ))}
+      );})}
     </div>
   );
 }

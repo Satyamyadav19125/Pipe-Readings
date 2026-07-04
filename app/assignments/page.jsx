@@ -139,13 +139,10 @@ export default function AssignmentsPage() {
 
       {!user && <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-900"><a href="/login" className="underline font-medium">Log in</a> to view or manage assignments.</div>}
 
-      {/* Admin: pending/done summary FIRST, people cards after */}
+      {/* People & villages come FIRST — the pipe tracker lives in the
+          "Missed readings" tab so the same table isn't shown twice. */}
       {isAdmin && (
-        <div>
-          <h3 className="text-base font-semibold text-slate-800 mb-2">📊 Pipe tracking — all villages</h3>
-          <MeterStatusTable />
-          <h3 className="text-base font-semibold text-slate-800 mt-5 mb-1">👥 People & villages</h3>
-        </div>
+        <h3 className="text-base font-semibold text-slate-800 mb-1">👥 People & villages</h3>
       )}
 
       {/* Field assistant: villages FIRST, weekly tracker after */}
