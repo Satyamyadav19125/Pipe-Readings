@@ -14,6 +14,8 @@ export const metadata = {
 
 export const viewport = {
   width: 'device-width', initialScale: 1, maximumScale: 1, userScalable: false, themeColor: '#16a34a',
+  // Mobile keyboards resize the page instead of covering the chat composer.
+  interactiveWidget: 'resizes-content',
 };
 
 // Runs BEFORE paint so the saved theme applies without a white/black flash.

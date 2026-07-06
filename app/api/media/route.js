@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 // Accepted uploads (stored as base64 in MongoDB, so they must stay SMALL):
 //   images (resized client-side), short voice notes, small audio files,
 //   and small documents (PDF / Office / text / CSV). Max ~256 KB each.
-const ALLOWED = /^data:(image\/(jpeg|png|webp|gif)|audio\/(webm|ogg|mpeg|mp4|aac|wav|x-m4a)|application\/(pdf|msword|vnd\.openxmlformats-officedocument\.[a-z.]+|vnd\.ms-excel)|text\/(plain|csv));base64,/i;
+const ALLOWED = /^data:(image\/(jpeg|png|webp|gif)|audio\/(webm|ogg|mpeg|mp4|aac|wav|x-m4a)(;codecs=[a-z0-9+,.-]+)?|application\/(pdf|msword|vnd\.openxmlformats-officedocument\.[a-z.]+|vnd\.ms-excel)|text\/(plain|csv));base64,/i;
 
 export async function POST(request) {
   const user = await getCurrentUser();

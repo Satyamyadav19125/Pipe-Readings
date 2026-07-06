@@ -93,17 +93,34 @@ export default async function KoboViewPage({ searchParams }) {
       url: `/api/photo?url=${encodeURIComponent(a.download_url)}`,
       label: labelFor(a),
     }));
-    // EVERY question the surveyor answered, in form order — internal Kobo
-    // bookkeeping keys are skipped. Shown in full in the detail modal.
-    const fields = Object.entries(s)
-      .filter(([k]) => !k.startsWith('_') && !k.startsWith('meta/') && !k.startsWith('formhub/') && k !== '__version__')
-      .map(([k, v]) => [
-        k.split('/').pop().replace(/_/g, ' '),
-        v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v)),
-      ]);
+    // ONE ordered, labeled list covering the WHOLE form — known questions get
+    // friendly labels, anything new the form gains later is appended
+    // automatically. Photos are excluded (they render as images above).
+    const LABELS = [
+      ['name', 'Surveyor'], ['village', 'Village'], ['farm', 'Farm ID'],
+      ['pipes', 'Pipe ID'], ['readings_mm', 'Water level (mm)'],
+      ['outside_validation', 'Outside height (mm)'], ['date', 'Date'],
+      ['start', 'Start time'], ['end_time', 'End time'], ['location', 'GPS'],
+    ];
+    const skip = new Set(['photo_reading', 'field_photo']);
+    const raw = {};
+    for (const [k, v] of Object.entries(s)) {
+      if (k.startsWith('_') || k.startsWith('meta/') || k.startsWith('formhub/') || k === '__version__') continue;
+      const seg = k.split('/').pop().toLowerCase();
+      if (skip.has(seg)) continue;
+      raw[seg] = v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+    }
+    const rows2 = [];
+    for (const [seg, label] of LABELS) {
+      if (seg in raw) { rows2.push([label, raw[seg]]); delete raw[seg]; }
+    }
+    for (const [seg, v] of Object.entries(raw)) {
+      rows2.push([seg.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()), v]);
+    }
     return {
       photos,
-      fields,
+      rows: rows2,
+      farm: getField(s, 'farm'),
       validation: getField(s, 'validation'),
       id: s._id,
       validation: (s._validation_status && s._validation_status.label) || '',

@@ -1,7 +1,7 @@
 import { fetchSubmissions } from '@/lib/kobo';
 import { filterSubmissionsForUser, applyUrlFilters } from '@/lib/filter';
 import { detectRedFlags } from '@/lib/redflags';
-import { toCsv, toJson, buildSummary } from '@/lib/export';
+import { toCsv, toJson, toLabeledRows, buildSummary } from '@/lib/export';
 
 export async function GET(request) {
   try {
@@ -37,16 +37,10 @@ export async function GET(request) {
       // Real Excel workbook: sheet 1 = data, sheet 2 = summary statistics
       // (totals, averages, min/max, per-village breakdown) about this data.
       const XLSX = await import('xlsx');
-      const { toJson: rowsOf } = await import('@/lib/export');
-      const rows = rowsOf(subs);
+      const rows = toLabeledRows(subs);
       const wb = XLSX.utils.book_new();
-      const dataSheet = XLSX.utils.json_to_sheet(rows.map((r) => ({
-        'Submission ID': r.id, 'Submitted At': r.time, 'Village': r.village,
-        'Pipe ID': r.serial, 'Water Level (mm)': r.reading,
-        'Outside Height (mm)': r.validation, 'Surveyor': r.surveyor,
-        'Form Date': r.date, 'Location': r.location,
-      })));
-      dataSheet['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 16 }, { wch: 12 }, { wch: 15 }, { wch: 17 }, { wch: 12 }, { wch: 11 }, { wch: 40 }];
+      const dataSheet = XLSX.utils.json_to_sheet(rows);
+      dataSheet['!cols'] = Object.keys(rows[0] || { '': 1 }).map((label) => ({ wch: Math.max(12, label.length + 2) }));
       XLSX.utils.book_append_sheet(wb, dataSheet, 'Readings');
 
       const { overall, perVillage } = buildSummary(subs);

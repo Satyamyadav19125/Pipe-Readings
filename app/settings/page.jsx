@@ -12,6 +12,7 @@ const FLAG_LABELS = {
   out_of_sequence: 'Reading date earlier than the previous one',
   inside_out_of_range: 'Inside reading outside the valid range (see Pipe parameters)',
   outside_out_of_range: 'Outside height differs from the standard (see Pipe parameters)',
+  missing_times: 'Start or end time missing on a submission',
   // Opt-in extras (off by default)
   duplicate_same_day: 'Same pipe read twice in one day',
   gps_outlier: "GPS far from this pipe's usual spot",
@@ -45,6 +46,7 @@ export default function SettingsPage() {
   const [dirty, setDirty] = useState(false);
   const [flagSearch, setFlagSearch] = useState('');
   const [activeForm, setActiveForm] = useState(null);
+  const [adminInfo, setAdminInfo] = useState(null);
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const dirtyRef = useRef(false);
 
@@ -90,7 +92,11 @@ export default function SettingsPage() {
           insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0,
           ...(data.settings.pipe || {}),
         },
-        security: { adminPasswords: [], ...(data.settings.security || {}) },
+        security: {
+          adminPasswords: (data.settings.security?.adminPasswords?.length
+            ? data.settings.security.adminPasswords
+            : (data.adminInfo?.passwords || [])),
+        },
         reading: {
           target: 2, periodLabel: 'week', periodDays: 7,
           photoMaxPx: 1600, photoQuality: 0.85,
@@ -99,6 +105,7 @@ export default function SettingsPage() {
         },
       });
       setActiveForm(data.activeForm || null);
+      setAdminInfo(data.adminInfo || null);
       setDirty(false);
       dirtyRef.current = false;
     } else {
@@ -298,10 +305,19 @@ export default function SettingsPage() {
       {/* Admin passwords — change admin login without touching Vercel */}
       <Section id="security" title="🔐 Admin passwords"
         subtitle="Passwords that log someone in as an ADMIN. Surveyor passwords are managed per person in Assignment → Team.">
+        {adminInfo && (
+          <div className="bg-brand-50 border border-brand-200 rounded-lg p-2.5 text-xs mb-2">
+            <b>{adminInfo.count} admin{adminInfo.count === 1 ? '' : 's'}</b> configured
+            {adminInfo.source === 'env' ? ' (from the ADMIN_PASSWORD env var — edit below and Save to manage them here instead)' : ' (managed here)'}.
+            {' '}Logged in as: <b>{adminInfo.names[adminInfo.youIndex] || 'Admin'}</b>
+          </div>
+        )}
         <div className="space-y-2">
           {(settings.security?.adminPasswords || []).map((pw, i) => (
             <div key={i} className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 w-16">Admin {i + 1}</span>
+              <span className="text-xs text-slate-500 w-24 truncate">
+                {(adminInfo?.names?.[i]) || `Admin ${i + 1}`}{adminInfo?.youIndex === i ? ' (you)' : ''}
+              </span>
               <input value={pw} onChange={(e) => updateSecurity((settings.security?.adminPasswords || []).map((x, j) => j === i ? e.target.value : x))}
                 placeholder="At least 4 characters" className="input flex-1 font-mono"/>
               <button onClick={() => updateSecurity((settings.security?.adminPasswords || []).filter((_, j) => j !== i))} className="text-red-600 text-sm px-1">🗑️</button>

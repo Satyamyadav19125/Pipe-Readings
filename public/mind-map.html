@@ -1,191 +1,323 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PVC Pipe Readings — How the tool works</title>
+<title>PVC Pipe Readings — Mind Map</title>
 <style>
-  :root {
-    --bg: #0b1220; --card: #131c2e; --line: #2a3a55; --text: #e2e8f0;
-    --dim: #94a3b8; --green: #16a34a; --blue: #0284c7; --amber: #f59e0b; --rose: #f43f5e;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; padding: 24px 16px 64px; background: var(--bg); color: var(--text);
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.5;
-  }
-  header { max-width: 900px; margin: 0 auto 20px; }
-  h1 { font-size: 1.45rem; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
-  h1 .pipeicon {
-    width: 34px; height: 34px; border-radius: 9px; flex: none;
-    background: linear-gradient(135deg, var(--green), var(--blue));
-    display: inline-flex; align-items: center; justify-content: center; font-size: 18px;
-  }
-  header p { color: var(--dim); font-size: .9rem; margin: 4px 0 0; }
-  .hint { color: var(--dim); font-size: .8rem; margin-top: 8px; }
-
-  .tree { max-width: 900px; margin: 0 auto; }
-  details {
-    border: 1px solid var(--line); border-radius: 12px; background: var(--card);
-    margin: 8px 0; overflow: hidden;
-  }
-  details details { margin: 8px 10px; background: #0f1826; }
-  details details details { background: #0c1420; }
-  summary {
-    cursor: pointer; padding: 11px 14px; font-weight: 600; font-size: .95rem;
-    display: flex; align-items: center; gap: 10px; user-select: none; list-style: none;
-  }
-  summary::-webkit-details-marker { display: none; }
-  summary::before { content: "▸"; color: var(--dim); transition: transform .15s; flex: none; }
-  details[open] > summary::before { transform: rotate(90deg); }
-  summary .tag {
-    margin-left: auto; font-size: .68rem; font-weight: 500; color: var(--dim);
-    border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; white-space: nowrap;
-  }
-  .leaf { padding: 4px 14px 12px 34px; font-size: .86rem; color: var(--dim); }
-  .leaf b, .leaf code { color: var(--text); }
-  .leaf code { background: #1c2a44; padding: 1px 5px; border-radius: 5px; font-size: .8rem; }
-  .leaf ul { margin: 6px 0 0; padding-left: 18px; }
-  .leaf li { margin: 3px 0; }
-  .dot { width: 9px; height: 9px; border-radius: 99px; display: inline-block; flex: none; }
-  .g { background: var(--green); } .b { background: var(--blue); }
-  .a { background: var(--amber); } .r { background: var(--rose); }
-  .arrow { text-align: center; color: var(--dim); font-size: 1.05rem; margin: -2px 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: radial-gradient(ellipse at center, #0a1628 0%, #050d1a 100%);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  overflow: hidden; width: 100vw; height: 100vh; color: #e2e8f0;
+}
+#header {
+  position: fixed; top: 0; left: 0; right: 0; height: 52px;
+  background: rgba(5,13,26,0.92); border-bottom: 1px solid rgba(34,197,94,0.3);
+  backdrop-filter: blur(12px); display: flex; align-items: center;
+  padding: 0 18px; gap: 14px; z-index: 100;
+}
+#header h1 { font-size: 15px; color: #22c55e; font-weight: 700; letter-spacing: .4px; }
+#header p { font-size: 11px; color: #475569; }
+.btn-group { margin-left: auto; display: flex; gap: 6px; }
+.btn {
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  color: #94a3b8; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  font-size: 11px; transition: all .2s;
+}
+.btn:hover { background: rgba(34,197,94,0.15); border-color: #22c55e; color: #22c55e; }
+#hint {
+  position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+  font-size: 11px; color: #64748b; background: rgba(5,13,26,0.85);
+  padding: 6px 14px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.06);
+  pointer-events: none; z-index: 100; text-align: center;
+}
+svg { width: 100vw; height: 100vh; cursor: grab; }
+svg:active { cursor: grabbing; }
+.link { fill: none; stroke-width: 1.5px; transition: stroke .3s; }
+.node { cursor: pointer; }
+.node circle { transition: r .3s, filter .3s; }
+.node text { pointer-events: none; dominant-baseline: middle; }
+.node-d0 circle { fill: #15803d; stroke: #22c55e; stroke-width: 2.5px; }
+.node-d0 text   { font-size: 14px; fill: #22c55e; font-weight: 700; }
+.node-d1 circle { fill: #1e3a5f; stroke: #3b82f6; stroke-width: 1.8px; }
+.node-d1 text   { font-size: 12.5px; fill: #93c5fd; font-weight: 600; }
+.node-d2 circle { fill: #1a3d2b; stroke: #4ade80; stroke-width: 1.5px; }
+.node-d2 text   { font-size: 11.5px; fill: #86efac; }
+.node-d3 circle { fill: #1e2d3d; stroke: #64748b; stroke-width: 1px; }
+.node-d3 text   { fill: #94a3b8; font-size: 11px; }
+.node:hover circle { filter: brightness(1.35) drop-shadow(0 0 6px currentColor); }
+.collapse-ring { fill: none; stroke-width: 2px; opacity: .6; }
+#tooltip {
+  position: fixed; background: rgba(15,23,42,0.96);
+  border: 1px solid rgba(34,197,94,0.4); border-radius: 8px; padding: 8px 13px;
+  font-size: 12px; color: #e2e8f0; pointer-events: none; max-width: 300px;
+  line-height: 1.5; z-index: 200; opacity: 0; transition: opacity .15s;
+}
 </style>
 </head>
 <body>
-<header>
-  <h1><span class="pipeicon">💧</span> PVC Pipe Readings — how the tool works</h1>
-  <p>Digital Village Project · Kharif 26 · AWD paddy irrigation monitoring across Punjab villages</p>
-  <p class="hint">Tap any branch to expand it — the tree goes from the field surveyor all the way down to what you see on screen.</p>
-</header>
 
-<div class="tree">
-
-<details open>
-  <summary><span class="dot g"></span>1 · Where the data is born — the field</summary>
-  <div class="leaf">A surveyor stands at a PVC observation pipe in a paddy field and opens the Kobo form on their phone.</div>
-  <details>
-    <summary>📋 The Kobo form: "Kharif 26 – PVC Pipes"</summary>
-    <div class="leaf">
-      Hosted on <code>kf.kobotoolbox.org</code>, asset UID <code>aytG3bjuzKg92S3QihTJ6J</code>. Questions the surveyor fills:
-      <ul>
-        <li><b>Date & start time</b> — when the visit happened</li>
-        <li><b>Name</b> — which surveyor (must match the Team list)</li>
-        <li><b>Village → Farm → Pipe</b> — cascading choice lists; ~1,188 pipes across all villages</li>
-        <li><b>Outside height (mm)</b> — pipe measured from ground to top; standard 150 mm</li>
-        <li><b>Water level inside (mm)</b> — tape lowered into the pipe; valid 50–250 mm</li>
-        <li><b>Photo of tape inside</b> + <b>field photo</b> — two pictures per visit</li>
-        <li><b>GPS location</b> — captured automatically at the pipe</li>
-      </ul>
-    </div>
-  </details>
-</details>
-
-<div class="arrow">⬇️</div>
-
-<details>
-  <summary><span class="dot b"></span>2 · How data reaches the dashboard</summary>
-  <details>
-    <summary>⚡ Webhook (instant path)</summary>
-    <div class="leaf">Kobo's <b>REST Services</b> is registered with the URL <code>https://pipe-readings-lac.vercel.app/api/webhook?secret=…</code>. Every time a form is submitted, Kobo POSTs there, and the dashboard clears its cache so the new reading appears within seconds. If this URL points at an old/deleted deployment, Kobo emails a <i>REST Services Failure Report</i> — the data is safe, only the instant ping fails.</div>
-  </details>
-  <details>
-    <summary>⏱️ 30-second cache (normal path)</summary>
-    <div class="leaf">Pages fetch submissions from the Kobo API (<code>/api/v2/assets/…/data/</code>) using the API token, through Next.js's Data Cache with a 30-second revalidation. So even without the webhook, the dashboard is never more than ~30 s behind.</div>
-  </details>
-  <details>
-    <summary>↻ Manual Refresh button</summary>
-    <div class="leaf">The header's Refresh calls <code>/api/refresh</code>, which busts the cache immediately — same effect as the webhook, triggered by hand.</div>
-  </details>
-  <details>
-    <summary>🧠 The form definition (master list)</summary>
-    <div class="leaf">Besides submissions, the tool also downloads the form's <b>choice lists</b> (every village, farm and pipe that exists). That's how it knows a pipe with <i>zero</i> submissions still exists — powering "95 / 1188 done" and the per-village to-take counts.</div>
-  </details>
-</details>
-
-<div class="arrow">⬇️</div>
-
-<details>
-  <summary><span class="dot b"></span>3 · Where things are stored</summary>
-  <details>
-    <summary>☁️ KoboToolbox (source of truth)</summary>
-    <div class="leaf">All readings and photos live on Kobo's servers. The dashboard never copies them into its own database — it reads them live (cached 30 s). Deleting the dashboard loses nothing.</div>
-  </details>
-  <details>
-    <summary>🍃 MongoDB Atlas — database <code>pipe_readings</code></summary>
-    <div class="leaf">Only the tool's own data lives here, isolated from the Water Meter app:
-      <ul>
-        <li><code>settings</code> — project info, red-flag toggles, pipe standards, Kobo forms, contact people, admin passwords</li>
-        <li><code>assignments</code> — surveyors, their villages, passwords, photos</li>
-        <li><code>messages</code> + <code>chat_reads</code> — team chat and unread tracking</li>
-        <li><code>tasks</code>, <code>media</code>, <code>verified</code> — to-dos, uploaded chat files, "mark as correct" flags</li>
-      </ul>
-    </div>
-  </details>
-  <details>
-    <summary>▲ Vercel (the app itself)</summary>
-    <div class="leaf">The Next.js app deployed from the GitHub repo. Every commit to <code>main</code> auto-deploys in ~1 minute. Environment variables hold the Mongo URI, Kobo token/UID, admin passwords fallback and webhook secret.</div>
-  </details>
-</details>
-
-<div class="arrow">⬇️</div>
-
-<details>
-  <summary><span class="dot a"></span>4 · The brain — what happens to every reading</summary>
-  <details>
-    <summary>🗺️ Field map (3-pass matcher)</summary>
-    <div class="leaf"><code>lib/fieldMap.js</code> translates Kobo's raw keys (<code>group_2/Readings_mm</code>) into logical names (reading, village, pipe, photo, GPS). It matches exact → case-insensitive → last-segment, so renaming a group in Kobo doesn't break the dashboard.</div>
-  </details>
-  <details>
-    <summary>🚩 Red-flag engine</summary>
-    <div class="leaf">Every submission is checked against the rules in <code>lib/redflags.js</code>:
-      <ul>
-        <li><b>Missing photo</b> — no picture attached</li>
-        <li><b>Stale 7 days</b> — a pipe's latest reading is older than a week</li>
-        <li><b>Inside out of range</b> — water level outside the 50–250 mm standard (Settings → Pipe parameters)</li>
-        <li><b>Outside differs from standard</b> — pipe height ≠ 150 mm (± tolerance) → sunk / lifted / wrong measurement</li>
-        <li>Stuck readings, future dates, out-of-sequence dates, plus opt-in GPS/duplicate/speed checks</li>
-      </ul>
-      Admins can toggle every rule and edit the standards in Settings; surveyors never see flags.</div>
-  </details>
-  <details>
-    <summary>📈 Weekly targets</summary>
-    <div class="leaf"><code>lib/weekly.js</code> groups readings per pipe per period (default: 1 reading / week) and classifies each pipe as <b>done</b>, <b>in progress</b> or <b>needs reading</b> — merged with the master list so never-read pipes count too.</div>
-  </details>
-</details>
-
-<div class="arrow">⬇️</div>
-
-<details>
-  <summary><span class="dot g"></span>5 · What you see — every tab explained</summary>
-  <details><summary>🏠 Overview</summary><div class="leaf">KPIs: total submissions, this-week progress <b>out of all 1,188 pipes</b>, villages, surveyors, flags. Surveyors see only their own villages.</div></details>
-  <details><summary>📋 Submissions</summary><div class="leaf">Every reading as a card — water level (mm), both photos labeled, flag details, "mark as correct" for admins, filters by village/surveyor/date/flag.</div></details>
-  <details><summary>💧 Water level</summary><div class="leaf">Per-pipe pairs of consecutive readings showing how the level moved between visits (rise and fall are both normal in AWD — never flagged).</div></details>
-  <details><summary>🗺️ Map</summary><div class="leaf">Every GPS-tagged reading as a pin — blue clean, red flagged. Street/Satellite/Topo layers with automatic fallback if street tiles fail, heat-map mode, pin popups with the full submission info, KML/GeoJSON/HTML export for your own cartography.</div></details>
-  <details><summary>👥 Assignment (3 sub-tabs)</summary><div class="leaf"><b>Team</b> — people, passwords, photos and village assignments. <b>Tasks</b> — to-dos. <b>Assignment</b> — done / left / total readings per village, collapsible per village, for this week or any past week.</div></details>
-  <details><summary>💬 Chat</summary><div class="leaf">Group + per-surveyor DMs. Photos (camera or gallery), voice notes, documents, location and live location. Unread badges on the tab and per room, browser notifications on new messages.</div></details>
-  <details><summary>🪞 Kobo View (admin)</summary><div class="leaf">Spreadsheet of raw submissions — every answered question, both photos, mini map with the pin, deep link to open that exact submission on the real KoboToolbox site.</div></details>
-  <details><summary>⚙️ Settings (admin)</summary><div class="leaf">Kobo forms (active UID shown), project info, reading targets, pipe standards, photo quality, contact people for the landing page, red-flag toggles, admin passwords, data & storage with XLSX/CSV/flag/map downloads per month.</div></details>
-</details>
-
-<div class="arrow">⬇️</div>
-
-<details>
-  <summary><span class="dot r"></span>6 · Getting data back out</summary>
-  <details><summary>📗 Excel (XLSX)</summary><div class="leaf">Two sheets: <b>Readings</b> (all rows) and <b>Summary</b> — totals, averages, min/max water level, per-village readings/pipes/last-reading table.</div></details>
-  <details><summary>📊 CSV / JSON</summary><div class="leaf">Same rows for scripts, R, Python or Google Sheets.</div></details>
-  <details><summary>🗺️ Map files</summary><div class="leaf">KML (Google Earth), GeoJSON (QGIS/ArcGIS) and a standalone HTML map — ready for the project's cartographic outputs.</div></details>
-</details>
-
-<details>
-  <summary><span class="dot r"></span>7 · Who can see what</summary>
-  <div class="leaf">
-    <b>Admins</b> (passwords in Settings → Admin passwords, or the <code>ADMIN_PASSWORD</code> env var) see everything.<br>
-    <b>Surveyors</b> (password set per person in Assignment → Team) see only their villages, no flags, no Kobo View, no Settings — a clean, positive field view.
+<div id="header">
+  <div>
+    <h1>💧 PVC Pipe Readings</h1>
+    <p>Digital Village Project · Kharif 26 · AWD monitoring, Punjab</p>
   </div>
-</details>
-
+  <div class="btn-group">
+    <button class="btn" onclick="expandAll()">Expand All</button>
+    <button class="btn" onclick="collapseAll()">Collapse All</button>
+    <button class="btn" onclick="resetZoom()">Reset View</button>
+  </div>
 </div>
+
+<svg id="svg"><g id="zoom-g"><g id="links-g"></g><g id="nodes-g"></g></g></svg>
+<div id="tooltip"></div>
+<div id="hint">🖱 Scroll to zoom · Drag to pan · Tap a node to grow its roots</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// The BASE (trunk) is the tool itself; each tap grows the roots deeper,
+// from where the data is born all the way to what you see on screen.
+const RAW = {
+  name: "PVC Pipe\nReadings Tool", icon: "💧",
+  info: "Live dashboard for AWD pipe water-level monitoring — tap the roots to explore.",
+  children: [
+    { name: "1 · The Field", icon: "🌾", info: "Where every reading is born.", children: [
+      { name: "Surveyor at the pipe", icon: "🧑‍🌾", children: [
+        { name: "Opens Kobo form\non the phone" },
+        { name: "Village → Farm → Pipe\ncascading choice" },
+        { name: "~1,188 pipes\nacross all villages" }
+      ]},
+      { name: "Measurements", icon: "📏", children: [
+        { name: "Outside height (mm)\nstandard: 150" },
+        { name: "Inside water level (mm)\nvalid: 50–250" },
+        { name: "Start + end time\nof the visit" }
+      ]},
+      { name: "Evidence", icon: "📷", children: [
+        { name: "Reading photo\n(tape in pipe)" },
+        { name: "Field photo" },
+        { name: "GPS auto-captured\nat the pipe" }
+      ]}
+    ]},
+    { name: "2 · Data Journey", icon: "🔄", info: "How a submission reaches your screen.", children: [
+      { name: "Webhook (instant)", icon: "⚡", children: [
+        { name: "Kobo REST Service POSTs to\n/api/webhook?secret=…" },
+        { name: "Cache busted →\nnew reading in seconds" },
+        { name: "Failure emails = webhook URL\npoints at old deployment" }
+      ]},
+      { name: "30-second cache", icon: "⏱️", children: [
+        { name: "Pages fetch Kobo API\nwith the API token" },
+        { name: "Never more than\n~30 s behind" }
+      ]},
+      { name: "Master list", icon: "🧠", children: [
+        { name: "Form choice lists =\nEVERY village + pipe" },
+        { name: "Pipes with 0 readings\nstill counted (95/1188)" }
+      ]},
+      { name: "Manual ↻ Refresh", icon: "🔘" }
+    ]},
+    { name: "3 · Storage", icon: "🗄️", info: "What lives where — Kobo keeps the readings, Mongo keeps the tool's own data.", children: [
+      { name: "KoboToolbox", icon: "☁️", children: [
+        { name: "Source of truth:\nreadings + photos" },
+        { name: "Dashboard reads live,\nnever copies" }
+      ]},
+      { name: "MongoDB: pipe_readings", icon: "🍃", children: [
+        { name: "settings — standards,\nflags, contacts, passwords" },
+        { name: "assignments — surveyors\n+ villages + logins" },
+        { name: "messages + chat_reads\n— chat & unread" },
+        { name: "tasks · media · verified" }
+      ]},
+      { name: "Vercel + GitHub", icon: "🚀", children: [
+        { name: "Commit to main →\nauto-deploy ~1 min" },
+        { name: "Env vars: Mongo URI,\nKobo token, secrets" }
+      ]}
+    ]},
+    { name: "4 · The Brain", icon: "🧩", info: "Every reading is checked the moment it's displayed.", children: [
+      { name: "Field matcher", icon: "🗺️", children: [
+        { name: "group_2/Readings_mm\n→ 'water level'" },
+        { name: "3-pass match survives\nform renames" }
+      ]},
+      { name: "Red-flag engine", icon: "🚩", children: [
+        { name: "Missing photo" },
+        { name: "No reading in 7 days" },
+        { name: "Inside level outside\n50–250 mm standard" },
+        { name: "Outside ≠ 150 mm\n(± tolerance)" },
+        { name: "Start / end time missing" },
+        { name: "Stuck · future date ·\nout-of-sequence" }
+      ]},
+      { name: "Weekly targets", icon: "🎯", children: [
+        { name: "1 reading / pipe / week\n(admin-adjustable)" },
+        { name: "done · in progress ·\nneeds reading" }
+      ]}
+    ]},
+    { name: "5 · What You See", icon: "🖥️", info: "Every tab, and who can see it.", children: [
+      { name: "Overview", icon: "🏠", children: [
+        { name: "KPIs + this-week progress\nout of ALL pipes" }
+      ]},
+      { name: "Submissions & Water level", icon: "📋", children: [
+        { name: "Cards with both photos,\nflags, mm units" },
+        { name: "Level changes between\nvisits (drying = normal)" }
+      ]},
+      { name: "Map", icon: "🗺️", children: [
+        { name: "Blue = clean, red = flagged" },
+        { name: "Street / Satellite / Topo\n+ auto tile fallback" },
+        { name: "Full-info popups" },
+        { name: "KML · GeoJSON · HTML export" }
+      ]},
+      { name: "Assignment", icon: "👥", children: [
+        { name: "Assignment — done / left /\ntotal per village" },
+        { name: "Team — people, villages,\npasswords (admin)" },
+        { name: "Tasks — extra to-dos" }
+      ]},
+      { name: "Chat", icon: "💬", children: [
+        { name: "Group + DMs, camera,\nvoice, files, location" },
+        { name: "Unread badges +\nbrowser notifications" }
+      ]},
+      { name: "Kobo View (admin)", icon: "🪞", children: [
+        { name: "Every answer + photos\n+ mini map per row" },
+        { name: "Open in KoboToolbox\n(exact submission)" }
+      ]},
+      { name: "Settings (admin)", icon: "⚙️", children: [
+        { name: "Pipe standards · flags ·\nadmin passwords · contacts" }
+      ]}
+    ]},
+    { name: "6 · Data Out", icon: "📤", info: "Getting data back out for analysis and mapping.", children: [
+      { name: "Excel (XLSX)", icon: "📗", children: [
+        { name: "Sheet 1: all readings\nincl. Farm ID + GPS split" },
+        { name: "Sheet 2: Summary —\navg/min/max per village" }
+      ]},
+      { name: "CSV / JSON", icon: "📊" },
+      { name: "Map files", icon: "🗺️", children: [
+        { name: "KML → Google Earth" },
+        { name: "GeoJSON → QGIS / ArcGIS" }
+      ]}
+    ]},
+    { name: "7 · People & Access", icon: "🔐", info: "Two roles, two very different views.", children: [
+      { name: "Admins", icon: "👑", children: [
+        { name: "Everything incl. flags,\nKobo View, Settings" },
+        { name: "Passwords changeable\nin Settings" }
+      ]},
+      { name: "Surveyors", icon: "🧑‍🌾", children: [
+        { name: "Only their villages" },
+        { name: "No flags — clean\npositive field view" }
+      ]}
+    ]}
+  ]
+};
+
+const W = window.innerWidth, H = window.innerHeight;
+const svg = d3.select('#svg');
+const g = d3.select('#zoom-g');
+const linksG = d3.select('#links-g');
+const nodesG = d3.select('#nodes-g');
+const tooltip = document.getElementById('tooltip');
+
+const zoom = d3.zoom().scaleExtent([0.15, 3]).on('zoom', e => g.attr('transform', e.transform));
+svg.call(zoom);
+
+const RADIUS = Math.min(W, H) * 0.46;
+
+function makeTree(data) {
+  const root = d3.hierarchy(data);
+  root.each(d => { d._children = null; });
+  root.each(d => {
+    if (d.depth >= 1 && d.children) { d._children = d.children; d.children = null; }
+  });
+  return root;
+}
+const tree = d3.tree().size([2 * Math.PI, RADIUS])
+  .separation((a, b) => (a.parent === b.parent ? 1 : 2) / a.depth);
+
+let root = makeTree(RAW);
+
+const strokeColors = ['#22c55e', '#3b82f6', '#4ade80', '#64748b'];
+const nodeRadii = [26, 15, 10, 6];
+
+let uid = 0;
+function id(d) { return d.data._uid || (d.data._uid = ++uid); }
+function radialPoint(x, y) { return [y * Math.cos(x - Math.PI / 2), y * Math.sin(x - Math.PI / 2)]; }
+
+function update(source) {
+  tree(root);
+  const duration = 450;
+  const linkPath = d3.linkRadial().angle(d => d.x).radius(d => d.y);
+
+  const link = linksG.selectAll('path.link').data(root.links(), d => id(d.target));
+  const linkEnter = link.enter().append('path').attr('class', 'link')
+    .attr('d', () => { const o = { x: source._x0 ?? source.x, y: source._y0 ?? source.y }; return linkPath({ source: o, target: o }); })
+    .style('opacity', 0);
+  linkEnter.merge(link).transition().duration(duration).ease(d3.easeCubicInOut)
+    .attr('d', linkPath).style('opacity', 1)
+    .attr('stroke', d => strokeColors[Math.min(d.target.depth, 3)] + '55');
+  link.exit().transition().duration(duration)
+    .attr('d', () => { const o = { x: source.x, y: source.y }; return linkPath({ source: o, target: o }); })
+    .style('opacity', 0).remove();
+
+  const node = nodesG.selectAll('g.node').data(root.descendants(), d => id(d));
+  const nodeEnter = node.enter().append('g')
+    .attr('class', d => `node node-d${Math.min(d.depth, 3)}`)
+    .attr('transform', () => {
+      const [px, py] = radialPoint(source._x0 ?? source.x, source._y0 ?? source.y);
+      return `translate(${px},${py})`;
+    })
+    .style('opacity', 0)
+    .on('click', (event, d) => { event.stopPropagation(); toggle(d); })
+    .on('mouseover', (event, d) => showTip(event, d))
+    .on('mousemove', (event) => { tooltip.style.left = (event.clientX + 14) + 'px'; tooltip.style.top = (event.clientY + 10) + 'px'; })
+    .on('mouseout', hideTip);
+  nodeEnter.append('circle').attr('r', 0);
+  nodeEnter.append('circle').attr('class', 'collapse-ring').attr('r', 0);
+  nodeEnter.append('text');
+
+  const nodeUpdate = nodeEnter.merge(node);
+  nodeUpdate.transition().duration(duration).ease(d3.easeCubicInOut)
+    .attr('transform', d => { const [px, py] = radialPoint(d.x, d.y); return `translate(${px},${py})`; })
+    .style('opacity', 1);
+  nodeUpdate.select('circle').transition().duration(duration)
+    .attr('r', d => nodeRadii[Math.min(d.depth, 3)]);
+  nodeUpdate.select('.collapse-ring').transition().duration(duration)
+    .attr('r', d => d._children ? nodeRadii[Math.min(d.depth, 3)] + 4 : 0)
+    .attr('stroke', d => strokeColors[Math.min(d.depth, 3)]);
+  nodeUpdate.select('text').each(function (d) {
+    const t = d3.select(this);
+    t.selectAll('tspan').remove();
+    const lines = (d.data.icon && d.depth > 0 ? d.data.icon + ' ' + d.data.name : d.data.name).split('\n');
+    const onLeft = d.depth > 0 && (d.x > Math.PI);
+    const r = nodeRadii[Math.min(d.depth, 3)];
+    t.attr('text-anchor', d.depth === 0 ? 'middle' : (onLeft ? 'end' : 'start'));
+    lines.forEach((line, i) => {
+      t.append('tspan')
+        .attr('x', d.depth === 0 ? 0 : (onLeft ? -(r + 8) : r + 8))
+        .attr('dy', i === 0 ? `${-(lines.length - 1) * 0.55}em` : '1.1em')
+        .text(line);
+    });
+  });
+  node.exit().transition().duration(duration)
+    .attr('transform', () => { const [px, py] = radialPoint(source.x, source.y); return `translate(${px},${py})`; })
+    .style('opacity', 0).remove();
+
+  root.each(d => { d._x0 = d.x; d._y0 = d.y; });
+}
+
+function toggle(d) {
+  if (d.children) { d._children = d.children; d.children = null; }
+  else if (d._children) { d.children = d._children; d._children = null; }
+  update(d);
+}
+function expandAll() { root.each(d => { if (d._children) { d.children = d._children; d._children = null; } }); update(root); }
+function collapseAll() { root.each(d => { if (d.depth >= 1 && d.children) { d._children = d.children; d.children = null; } }); update(root); }
+function resetZoom() { svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity.translate(W / 2, H / 2)); }
+function showTip(event, d) {
+  const extra = d.data.info || (d._children ? 'Tap to grow this root' : (d.children ? 'Tap to fold this root' : ''));
+  if (!extra) return;
+  tooltip.innerHTML = `<b>${(d.data.icon || '') + ' ' + d.data.name.replace(/\n/g, ' ')}</b><br>${extra}`;
+  tooltip.style.opacity = 1;
+  tooltip.style.left = (event.clientX + 14) + 'px';
+  tooltip.style.top = (event.clientY + 10) + 'px';
+}
+function hideTip() { tooltip.style.opacity = 0; }
+
+svg.call(zoom.transform, d3.zoomIdentity.translate(W / 2, H / 2));
+update(root);
+</script>
 </body>
 </html>

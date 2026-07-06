@@ -1,21 +1,16 @@
 'use client';
 
-import { Component, useState } from 'react';
+import { Component, useEffect, useState } from 'react';
 import AssignmentsPage from '../assignments/page';
 import TasksPage from '../tasks/page';
 import MissedPage from '../missed/page';
 
-// One tab that holds Assignments, Tasks and Missed readings (#16).
+// One tab holding the per-village Assignment view, Team management and Tasks.
+// Order + visibility depend on role:
+//   admin:    📌 Assignment · 👥 Team · ✅ Tasks
+//   surveyor: 📌 Assignment · ✅ Tasks   (no Team management)
 // The old routes (/assignments, /tasks, /missed) still work for deep links.
-const TABS = [
-  { key: 'assignments', label: '👥 Team' },
-  { key: 'tasks', label: '✅ Tasks' },
-  { key: 'missed', label: '📌 Assignment' },
-];
 
-// If a tab crashes client-side (e.g. on a specific phone browser), show the
-// actual error + a retry button instead of a silent blank page. This makes
-// mobile-only failures diagnosable from a screenshot.
 class TabErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(error) { return { error }; }
@@ -37,12 +32,26 @@ class TabErrorBoundary extends Component {
 }
 
 export default function TeamPage() {
-  const [tab, setTab] = useState('assignments');
+  const [tab, setTab] = useState('missed'); // Assignment view opens first
+  const [isAdmin, setIsAdmin] = useState(null); // null = still checking
+
+  useEffect(() => {
+    fetch('/api/auth/check')
+      .then((r) => r.json())
+      .then((d) => setIsAdmin(d.user?.role === 'admin'))
+      .catch(() => setIsAdmin(false));
+  }, []);
+
+  const tabs = [
+    { key: 'missed', label: '📌 Assignment' },
+    ...(isAdmin ? [{ key: 'assignments', label: '👥 Team' }] : []),
+    { key: 'tasks', label: '✅ Tasks' },
+  ];
 
   return (
     <div className="space-y-3">
       <div className="flex gap-2 overflow-x-auto pb-1 sticky top-[60px] z-[500] bg-transparent">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`px-3.5 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition shadow-sm ${
               tab === t.key ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
@@ -53,10 +62,10 @@ export default function TeamPage() {
       </div>
 
       <TabErrorBoundary>
-        {/* All three stay mounted — switching tabs is instant, no refetch. */}
-        <div className={tab === 'assignments' ? '' : 'hidden'}><AssignmentsPage /></div>
-        <div className={tab === 'tasks' ? '' : 'hidden'}><TasksPage /></div>
+        {/* All panes stay mounted — switching is instant, no refetch. */}
         <div className={tab === 'missed' ? '' : 'hidden'}><MissedPage /></div>
+        {isAdmin && <div className={tab === 'assignments' ? '' : 'hidden'}><AssignmentsPage /></div>}
+        <div className={tab === 'tasks' ? '' : 'hidden'}><TasksPage /></div>
       </TabErrorBoundary>
     </div>
   );

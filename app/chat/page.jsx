@@ -328,7 +328,9 @@ export default function ChatPage() {
         stream.getTracks().forEach((t) => t.stop());
         setRecording(false);
         if (rec._cancelled) return;
-        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+        // rec.mimeType can be 'audio/webm;codecs=opus' — strip the codecs
+        // part so the upload data-URL is a plain, accepted audio type.
+        const blob = new Blob(chunks, { type: (rec.mimeType || 'audio/webm').split(';')[0] });
         if (blob.size > MAX_FILE_BYTES) { setError('Voice note too long — keep it under ~1 minute.'); return; }
         setSending(true);
         try {
@@ -492,7 +494,7 @@ export default function ChatPage() {
 
       {error && <div className="bg-amber-50 border border-amber-200 rounded p-2 text-sm text-amber-900">{error}</div>}
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden flex flex-col" style={{ height: 'calc(100dvh - 200px)', minHeight: 380 }}>
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden flex flex-col" style={{ height: 'calc(100dvh - 168px)', minHeight: 300 }}>
         <div className="px-4 py-2.5 border-b border-slate-100 bg-gradient-to-r from-brand-700 to-field-700 text-white flex items-center gap-2 shrink-0">
           <span className="text-lg">{activeIcon}</span>
           <div className="min-w-0">

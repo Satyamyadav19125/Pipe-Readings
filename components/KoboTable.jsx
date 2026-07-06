@@ -7,17 +7,15 @@ import { useMemo, useState } from 'react';
 // `mobile: false` columns are hidden on phones so the table fits the screen
 // without left-right scrolling; tap the row number (👁) to see everything.
 const COLUMNS = [
-  { key: 'validation', label: 'Validation', width: 110, mobile: false },
-  { key: 'start', label: 'start', width: 150, mobile: false },
-  { key: 'end', label: 'end', width: 150, mobile: false },
   { key: 'date', label: 'Date', width: 100, mobile: true },
-  { key: 'time', label: 'time', width: 130, mobile: false },
+  { key: 'time', label: 'Time', width: 130, mobile: false },
   { key: 'gps', label: 'Surveyor location', width: 180, mobile: false },
-  { key: 'surveyor', label: 'Surveyor name', width: 110, mobile: false },
+  { key: 'surveyor', label: 'Surveyor', width: 110, mobile: false },
   { key: 'village', label: 'Village', width: 90, mobile: true },
+  { key: 'farm', label: 'Farm ID', width: 190, mobile: false },
   { key: 'meter', label: 'Pipe ID', width: 110, mobile: true },
-  { key: 'reading', label: 'Reading', width: 80, mobile: true },
-  { key: 'validation', label: 'Outside (mm)', mobile: false },
+  { key: 'reading', label: 'Level (mm)', width: 90, mobile: true },
+  { key: 'validation', label: 'Outside (mm)', width: 100, mobile: false },
 ];
 const hideCls = (c) => (c.mobile ? '' : 'hidden md:table-cell');
 
@@ -141,19 +139,6 @@ export default function KoboTable({ rows }) {
               <button onClick={() => setDetail(null)} className="text-white/90 text-xl leading-none">×</button>
             </div>
             <div className="p-4 space-y-2 text-sm">
-              {Array.isArray(detail.fields) && detail.fields.length > 0 && (
-                <div className="mb-2">
-                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">All answers</div>
-                  <div className="border border-slate-200 rounded-lg divide-y divide-slate-100">
-                    {detail.fields.map(([k, v], i) => (
-                      <div key={i} className="flex items-start justify-between gap-3 px-2.5 py-1.5 text-sm">
-                        <span className="text-slate-500 capitalize">{k}</span>
-                        <span className="text-slate-900 dark:text-slate-100 font-medium text-right break-all">{v || '—'}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
               {(detail.photos?.length ? detail.photos : (detail.photo ? [{ url: detail.photo, label: 'Photo' }] : [])).length > 0 && (
                 <div className={`grid ${((detail.photos?.length || 1) > 1) ? 'grid-cols-2' : 'grid-cols-1'} gap-2 mb-2`}>
                   {(detail.photos?.length ? detail.photos : [{ url: detail.photo, label: 'Photo' }]).map((p, i) => (
@@ -166,15 +151,18 @@ export default function KoboTable({ rows }) {
                   ))}
                 </div>
               )}
-              <Row k="Surveyor" v={detail.surveyor} />
-              <Row k="Village" v={detail.village} />
-              <Row k="Pipe ID" v={detail.meter} mono />
-              <Row k="Reading" v={detail.reading} bold />
-              <Row k="Date" v={detail.date} />
-              <Row k="Time" v={detail.time} />
-              <Row k="Start" v={detail.start} />
-              <Row k="End" v={detail.end} />
-              <Row k="GPS" v={detail.gps} mono />
+              {Array.isArray(detail.rows) && detail.rows.length > 0
+                ? detail.rows.map(([k, v], i) => (
+                    <Row key={i} k={k} v={v}
+                      mono={/GPS|ID/i.test(k)}
+                      bold={/Water level/i.test(k)} />
+                  ))
+                : (<>
+                    <Row k="Surveyor" v={detail.surveyor} />
+                    <Row k="Village" v={detail.village} />
+                    <Row k="Pipe ID" v={detail.meter} mono />
+                    <Row k="Reading" v={detail.reading} bold />
+                  </>)}
               <Row k="Submitted" v={detail.submitted} />
               {detail.lat != null && detail.lng != null && (
                 <div className="pt-1">

@@ -15,7 +15,20 @@ export async function GET() {
       const f = await getActiveForm();
       activeForm = { name: f.name || 'env-default', baseUrl: f.baseUrl || process.env.KOBO_BASE_URL || 'https://kf.kobotoolbox.org', assetUid: f.assetUid || '' };
     } catch { /* not configured yet */ }
-    return NextResponse.json({ settings, activeForm });
+    // Admin login overview for Settings -> Admin passwords: where the
+    // passwords come from, how many admins there are, which one is YOU, and
+    // the current list (prefilled so "change my password" is one edit away).
+    const dbList = (settings.security?.adminPasswords || []).map((p) => String(p)).filter(Boolean);
+    const activeList = dbList.length > 0 ? dbList : envAdminPasswords();
+    const profiles = settings.adminProfiles || {};
+    const adminInfo = {
+      source: dbList.length > 0 ? 'settings' : 'env',
+      count: activeList.length,
+      passwords: activeList,
+      youIndex: user?.adminId ? Number(String(user.adminId).replace('admin', '')) : -1,
+      names: activeList.map((_, i) => profiles[`admin${i}`]?.name || `Admin ${i + 1}`),
+    };
+    return NextResponse.json({ settings, activeForm, adminInfo });
   }
   // Non-admin: strip Kobo API tokens AND admin personal profiles (don't leak
   // names/photos/phones of admins to surveyors).
