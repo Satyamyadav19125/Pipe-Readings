@@ -69,8 +69,16 @@ export default function SettingsPage() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch('/api/settings');
-    const data = await res.json();
+    let data = {};
+    try {
+      const res = await fetch('/api/settings');
+      data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Settings failed to load (HTTP ${res.status})`);
+    } catch (e) {
+      setError(e.message);
+      setLoading(false);
+      return;
+    }
     if (data.settings) {
       // Defensive: legacy DB documents may be missing newer sub-objects.
       // Fill them with safe defaults so the page never crashes on access.

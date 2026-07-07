@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSettings, saveSettings, getActiveForm, DEFAULT_SETTINGS } from '@/lib/db';
-import { isAdmin, getCurrentUser } from '@/lib/auth';
+import { isAdmin, getCurrentUser, envAdminPasswords } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 

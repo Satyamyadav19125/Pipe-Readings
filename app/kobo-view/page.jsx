@@ -119,6 +119,7 @@ export default async function KoboViewPage({ searchParams }) {
     }
     return {
       photos,
+      photosCount: photos.length,
       rows: rows2,
       farm: getField(s, 'farm'),
       validation: getField(s, 'validation'),

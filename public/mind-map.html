@@ -80,126 +80,45 @@ svg:active { cursor: grabbing; }
 // from where the data is born all the way to what you see on screen.
 const RAW = {
   name: "PVC Pipe\nReadings Tool", icon: "💧",
-  info: "Live dashboard for AWD pipe water-level monitoring — tap the roots to explore.",
+  info: "AWD pipe water-level monitoring — tap the roots to explore.",
   children: [
-    { name: "1 · The Field", icon: "🌾", info: "Where every reading is born.", children: [
-      { name: "Surveyor at the pipe", icon: "🧑‍🌾", children: [
-        { name: "Opens Kobo form\non the phone" },
-        { name: "Village → Farm → Pipe\ncascading choice" },
-        { name: "~1,188 pipes\nacross all villages" }
-      ]},
-      { name: "Measurements", icon: "📏", children: [
-        { name: "Outside height (mm)\nstandard: 150" },
-        { name: "Inside water level (mm)\nvalid: 50–250" },
-        { name: "Start + end time\nof the visit" }
-      ]},
-      { name: "Evidence", icon: "📷", children: [
-        { name: "Reading photo\n(tape in pipe)" },
-        { name: "Field photo" },
-        { name: "GPS auto-captured\nat the pipe" }
-      ]}
+    { name: "The Field", icon: "🌾", info: "Surveyor fills the Kobo form at each pipe.", children: [
+      { name: "Village → Farm → Pipe\n(~1,188 pipes)" },
+      { name: "Water level inside (mm)\nvalid 50–250" },
+      { name: "Outside height (mm)\nstandard 150" },
+      { name: "2 photos + GPS\n+ start/end time" }
     ]},
-    { name: "2 · Data Journey", icon: "🔄", info: "How a submission reaches your screen.", children: [
-      { name: "Webhook (instant)", icon: "⚡", children: [
-        { name: "Kobo REST Service POSTs to\n/api/webhook?secret=…" },
-        { name: "Cache busted →\nnew reading in seconds" },
-        { name: "Failure emails = webhook URL\npoints at old deployment" }
-      ]},
-      { name: "30-second cache", icon: "⏱️", children: [
-        { name: "Pages fetch Kobo API\nwith the API token" },
-        { name: "Never more than\n~30 s behind" }
-      ]},
-      { name: "Master list", icon: "🧠", children: [
-        { name: "Form choice lists =\nEVERY village + pipe" },
-        { name: "Pipes with 0 readings\nstill counted (95/1188)" }
-      ]},
-      { name: "Manual ↻ Refresh", icon: "🔘" }
+    { name: "Data Journey", icon: "🔄", info: "Kobo → dashboard in seconds.", children: [
+      { name: "Webhook pings the tool\non every submission" },
+      { name: "30-second cache\n+ manual ↻ Refresh" },
+      { name: "Form choice lists =\nevery pipe, even unread" }
     ]},
-    { name: "3 · Storage", icon: "🗄️", info: "What lives where — Kobo keeps the readings, Mongo keeps the tool's own data.", children: [
-      { name: "KoboToolbox", icon: "☁️", children: [
-        { name: "Source of truth:\nreadings + photos" },
-        { name: "Dashboard reads live,\nnever copies" }
-      ]},
-      { name: "MongoDB: pipe_readings", icon: "🍃", children: [
-        { name: "settings — standards,\nflags, contacts, passwords" },
-        { name: "assignments — surveyors\n+ villages + logins" },
-        { name: "messages + chat_reads\n— chat & unread" },
-        { name: "tasks · media · verified" }
-      ]},
-      { name: "Vercel + GitHub", icon: "🚀", children: [
-        { name: "Commit to main →\nauto-deploy ~1 min" },
-        { name: "Env vars: Mongo URI,\nKobo token, secrets" }
-      ]}
+    { name: "Storage", icon: "🗄️", info: "Readings stay on Kobo; the tool's own data lives in MongoDB.", children: [
+      { name: "KoboToolbox =\nreadings + photos" },
+      { name: "MongoDB = settings, team,\nchat, tasks" },
+      { name: "Vercel + GitHub =\nthe app, auto-deploy" }
     ]},
-    { name: "4 · The Brain", icon: "🧩", info: "Every reading is checked the moment it's displayed.", children: [
-      { name: "Field matcher", icon: "🗺️", children: [
-        { name: "group_2/Readings_mm\n→ 'water level'" },
-        { name: "3-pass match survives\nform renames" }
-      ]},
-      { name: "Red-flag engine", icon: "🚩", children: [
-        { name: "Missing photo" },
-        { name: "No reading in 7 days" },
-        { name: "Inside level outside\n50–250 mm standard" },
-        { name: "Outside ≠ 150 mm\n(± tolerance)" },
-        { name: "Start / end time missing" },
-        { name: "Stuck · future date ·\nout-of-sequence" }
-      ]},
-      { name: "Weekly targets", icon: "🎯", children: [
-        { name: "1 reading / pipe / week\n(admin-adjustable)" },
-        { name: "done · in progress ·\nneeds reading" }
-      ]}
+    { name: "The Brain", icon: "🧩", info: "Every reading is checked automatically.", children: [
+      { name: "Red flags: no photo,\nstale 7 days, missing times" },
+      { name: "Standards: inside 50–250,\noutside = 150 mm" },
+      { name: "Weekly target:\n1 reading / pipe" }
     ]},
-    { name: "5 · What You See", icon: "🖥️", info: "Every tab, and who can see it.", children: [
-      { name: "Overview", icon: "🏠", children: [
-        { name: "KPIs + this-week progress\nout of ALL pipes" }
-      ]},
-      { name: "Submissions & Water level", icon: "📋", children: [
-        { name: "Cards with both photos,\nflags, mm units" },
-        { name: "Level changes between\nvisits (drying = normal)" }
-      ]},
-      { name: "Map", icon: "🗺️", children: [
-        { name: "Blue = clean, red = flagged" },
-        { name: "Street / Satellite / Topo\n+ auto tile fallback" },
-        { name: "Full-info popups" },
-        { name: "KML · GeoJSON · HTML export" }
-      ]},
-      { name: "Assignment", icon: "👥", children: [
-        { name: "Assignment — done / left /\ntotal per village" },
-        { name: "Team — people, villages,\npasswords (admin)" },
-        { name: "Tasks — extra to-dos" }
-      ]},
-      { name: "Chat", icon: "💬", children: [
-        { name: "Group + DMs, camera,\nvoice, files, location" },
-        { name: "Unread badges +\nbrowser notifications" }
-      ]},
-      { name: "Kobo View (admin)", icon: "🪞", children: [
-        { name: "Every answer + photos\n+ mini map per row" },
-        { name: "Open in KoboToolbox\n(exact submission)" }
-      ]},
-      { name: "Settings (admin)", icon: "⚙️", children: [
-        { name: "Pipe standards · flags ·\nadmin passwords · contacts" }
-      ]}
+    { name: "The Screens", icon: "🖥️", info: "What each tab shows.", children: [
+      { name: "Overview — KPIs\nout of ALL pipes" },
+      { name: "Submissions +\nWater level" },
+      { name: "Map — pins, heat,\n3 base layers" },
+      { name: "Assignment — done/left\nper village · Team · Tasks" },
+      { name: "Chat — media, unread\nbadges, notifications" },
+      { name: "Kobo View + Settings\n(admin only)" }
     ]},
-    { name: "6 · Data Out", icon: "📤", info: "Getting data back out for analysis and mapping.", children: [
-      { name: "Excel (XLSX)", icon: "📗", children: [
-        { name: "Sheet 1: all readings\nincl. Farm ID + GPS split" },
-        { name: "Sheet 2: Summary —\navg/min/max per village" }
-      ]},
-      { name: "CSV / JSON", icon: "📊" },
-      { name: "Map files", icon: "🗺️", children: [
-        { name: "KML → Google Earth" },
-        { name: "GeoJSON → QGIS / ArcGIS" }
-      ]}
+    { name: "Data Out", icon: "📤", info: "Exports for analysis and cartography.", children: [
+      { name: "Excel — readings\n+ Summary sheet" },
+      { name: "CSV / JSON" },
+      { name: "KML · GeoJSON ·\nHTML map" }
     ]},
-    { name: "7 · People & Access", icon: "🔐", info: "Two roles, two very different views.", children: [
-      { name: "Admins", icon: "👑", children: [
-        { name: "Everything incl. flags,\nKobo View, Settings" },
-        { name: "Passwords changeable\nin Settings" }
-      ]},
-      { name: "Surveyors", icon: "🧑‍🌾", children: [
-        { name: "Only their villages" },
-        { name: "No flags — clean\npositive field view" }
-      ]}
+    { name: "Access", icon: "🔐", info: "Two roles, two views.", children: [
+      { name: "Admins — everything,\npasswords in Settings" },
+      { name: "Surveyors — own villages,\nno flags" }
     ]}
   ]
 };
@@ -220,7 +139,7 @@ function makeTree(data) {
   const root = d3.hierarchy(data);
   root.each(d => { d._children = null; });
   root.each(d => {
-    if (d.depth >= 1 && d.children) { d._children = d.children; d.children = null; }
+    if (d.depth >= 2 && d.children) { d._children = d.children; d.children = null; }
   });
   return root;
 }

@@ -6,16 +6,20 @@ import { useMemo, useState } from 'react';
 
 // `mobile: false` columns are hidden on phones so the table fits the screen
 // without left-right scrolling; tap the row number (👁) to see everything.
+// Every question the surveyor fills, as a column — the table slides
+// horizontally to show the whole form without opening the detail view.
 const COLUMNS = [
   { key: 'date', label: 'Date', width: 100, mobile: true },
-  { key: 'time', label: 'Time', width: 130, mobile: false },
-  { key: 'gps', label: 'Surveyor location', width: 180, mobile: false },
+  { key: 'start', label: 'Start', width: 120, mobile: false },
+  { key: 'end', label: 'End', width: 120, mobile: false },
   { key: 'surveyor', label: 'Surveyor', width: 110, mobile: false },
   { key: 'village', label: 'Village', width: 90, mobile: true },
-  { key: 'farm', label: 'Farm ID', width: 190, mobile: false },
+  { key: 'farm', label: 'Farm ID', width: 200, mobile: false },
   { key: 'meter', label: 'Pipe ID', width: 110, mobile: true },
   { key: 'reading', label: 'Level (mm)', width: 90, mobile: true },
   { key: 'validation', label: 'Outside (mm)', width: 100, mobile: false },
+  { key: 'gps', label: 'GPS', width: 170, mobile: false },
+  { key: 'photosCount', label: 'Photos', width: 70, mobile: false },
 ];
 const hideCls = (c) => (c.mobile ? '' : 'hidden md:table-cell');
 

@@ -73,6 +73,7 @@ export default function MapView({ points = [], showFlagFilter = true }) {
   const tileLayerRef = useRef(null);
   const markersRef = useRef([]);
   const heatRef = useRef(null);
+  const heatTapRef = useRef([]); // invisible tap targets over the heat blobs
   const myMarkerRef = useRef(null);
   const [layer, setLayer] = useState('street');
   const [filterMode, setFilterMode] = useState('all');
@@ -167,6 +168,8 @@ export default function MapView({ points = [], showFlagFilter = true }) {
     const L = window.L;
     if (!m || !L) return;
     if (heatRef.current) { m.removeLayer(heatRef.current); heatRef.current = null; }
+    for (const t of heatTapRef.current) m.removeLayer(t);
+    heatTapRef.current = [];
     const shown = [];
     for (const item of markersRef.current) {
       const show = viewMode === 'pins' && matchesFilter(item.isFlagged);
@@ -179,6 +182,20 @@ export default function MapView({ points = [], showFlagFilter = true }) {
         .map((i) => [i.lat, i.lng, i.isFlagged ? 1.0 : 0.5]);
       if (heatPts.length) {
         heatRef.current = L.heatLayer(heatPts, { radius: 28, blur: 18, maxZoom: 17, minOpacity: 0.35 }).addTo(m);
+      }
+      // The heat canvas itself isn't clickable — lay a nearly invisible tap
+      // target on every point, reusing the SAME popup as the pin view, so
+      // tapping a heat blob opens the full submission details.
+      for (const item of markersRef.current) {
+        if (!matchesFilter(item.isFlagged)) continue;
+        const popupContent = item.marker.getPopup()?.getContent?.() || '';
+        const tap = L.circleMarker([item.lat, item.lng], {
+          radius: 13, stroke: false, fillColor: '#f97316', fillOpacity: 0.06,
+          interactive: true, bubblingMouseEvents: false,
+        });
+        if (popupContent) tap.bindPopup(popupContent);
+        tap.addTo(m);
+        heatTapRef.current.push(tap);
       }
     }
     const boundsSrc = viewMode === 'pins'
