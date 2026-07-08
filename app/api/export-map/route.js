@@ -147,13 +147,13 @@ export async function GET(request) {
         })),
       };
       return new Response(JSON.stringify(geo, null, 2), {
-        headers: { 'Content-Type': 'application/geo+json; charset=utf-8', 'Content-Disposition': `attachment; filename="water-meter-map-${ts}.geojson"` },
+        headers: { 'Content-Type': 'application/geo+json; charset=utf-8', 'Content-Disposition': `attachment; filename="pipe-map-${ts}.geojson"` },
       });
     }
 
     if (format === 'kml') {
       return new Response(buildKml(points, ts), {
-        headers: { 'Content-Type': 'application/vnd.google-earth.kml+xml; charset=utf-8', 'Content-Disposition': `attachment; filename="water-meter-map-${ts}.kml"` },
+        headers: { 'Content-Type': 'application/vnd.google-earth.kml+xml; charset=utf-8', 'Content-Disposition': `attachment; filename="pipe-map-${ts}.kml"` },
       });
     }
 
@@ -161,7 +161,7 @@ export async function GET(request) {
       const kml = buildKml(points, ts);
       const zip = zipSingleFile('doc.kml', Buffer.from(kml, 'utf8'));
       return new Response(zip, {
-        headers: { 'Content-Type': 'application/vnd.google-earth.kmz', 'Content-Disposition': `attachment; filename="water-meter-map-${ts}.kmz"` },
+        headers: { 'Content-Type': 'application/vnd.google-earth.kmz', 'Content-Disposition': `attachment; filename="pipe-map-${ts}.kmz"` },
       });
     }
 
@@ -186,7 +186,7 @@ const markers = points.map(p => {
 if (markers.length) map.fitBounds(L.featureGroup(markers).getBounds().pad(0.2));
 </script></body></html>`;
       return new Response(html, {
-        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': `attachment; filename="water-meter-map-${ts}.html"` },
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': `attachment; filename="pipe-map-${ts}.html"` },
       });
     }
 
@@ -200,7 +200,7 @@ if (markers.length) map.fitBounds(L.featureGroup(markers).getBounds().pad(0.2));
       }).join(','));
     }
     return new Response('\uFEFF' + lines.join('\n'), {
-      headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="water-meter-map-${ts}.csv"` },
+      headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="pipe-map-${ts}.csv"` },
     });
   } catch (e) {
     return new Response(`Export error: ${e.message}`, { status: 500 });

@@ -19,13 +19,54 @@ const COLUMNS = [
   { key: 'reading', label: 'Level (mm)', width: 90, mobile: true },
   { key: 'validation', label: 'Outside (mm)', width: 100, mobile: false },
   { key: 'gps', label: 'GPS', width: 170, mobile: false },
-  { key: 'photosCount', label: 'Photos', width: 70, mobile: false },
 ];
 const hideCls = (c) => (c.mobile ? '' : 'hidden md:table-cell');
 
 const PAGE_SIZES = [30, 50, 100];
 
-export default function KoboTable({ rows }) {
+// Body cells are generated from COLUMNS — the same array that renders the
+// header and search row — so the three can never drift out of alignment
+// again. Formatting per key lives here.
+function cellClass(c) {
+  const base = 'px-2 md:px-3 py-2 ' + hideCls(c);
+  switch (c.key) {
+    case 'date': return base + ' whitespace-nowrap text-xs md:text-sm';
+    case 'start':
+    case 'end': return base + ' text-xs text-slate-600 whitespace-nowrap';
+    case 'surveyor': return base + ' whitespace-nowrap';
+    case 'village': return base + ' whitespace-nowrap text-xs md:text-sm';
+    case 'farm':
+    case 'meter': return base + ' font-mono text-xs whitespace-nowrap';
+    case 'reading': return base + ' font-semibold tabular-nums text-xs md:text-sm';
+    case 'gps': return base + ' font-mono text-xs text-slate-500 whitespace-nowrap';
+    default: return base + ' text-xs whitespace-nowrap';
+  }
+}
+function cellValue(c, r, std) {
+  const v = r[c.key];
+  const num = (x) => (x === '' || x == null ? NaN : Number(x));
+  if (c.key === 'validation') {
+    if (!v) return <span className="text-slate-300">–</span>;
+    // Outside height: green chip when it matches the standard (± tolerance),
+    // red when it doesn't — same rule as the red-flag engine.
+    const sVal = num(std?.outsideStandardMm);
+    const tol = Number.isFinite(num(std?.outsideToleranceMm)) ? num(std?.outsideToleranceMm) : 0;
+    const bad = Number.isFinite(sVal) && Number.isFinite(num(v)) && Math.abs(num(v) - sVal) > tol;
+    return <span className={`text-xs px-1.5 py-0.5 rounded ${bad ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>{v}</span>;
+  }
+  if (c.key === 'reading') {
+    if (v === undefined || v === null || v === '') return <span className="text-slate-300">–</span>;
+    const min = Number.isFinite(num(std?.insideMinMm)) ? num(std?.insideMinMm) : 0;
+    const max = num(std?.insideMaxMm);
+    const bad = Number.isFinite(max) && Number.isFinite(num(v)) && (num(v) < min || num(v) > max);
+    return bad ? <span className="text-rose-600">{v} ⚠</span> : v;
+  }
+  if (v === undefined || v === null || v === '' || v === 'Unknown') return <span className="text-slate-300">–</span>;
+  return v;
+}
+
+
+export default function KoboTable({ rows = [], standards = null }) {
   const [search, setSearch] = useState({});
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(30);
@@ -89,23 +130,14 @@ export default function KoboTable({ rows }) {
                     {safePage * pageSize + i + 1} 👁
                   </button>
                 </td>
-                <td className="px-2 md:px-3 py-2 hidden md:table-cell">
-                  {r.validation
-                    ? <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">{r.validation}</span>
-                    : <span className="text-slate-300">–</span>}
-                </td>
-                <td className="px-2 md:px-3 py-2 text-xs text-slate-600 whitespace-nowrap hidden md:table-cell">{r.start}</td>
-                <td className="px-2 md:px-3 py-2 text-xs text-slate-600 whitespace-nowrap hidden md:table-cell">{r.end}</td>
-                <td className="px-2 md:px-3 py-2 whitespace-nowrap text-xs md:text-sm">{r.date}</td>
-                <td className="px-2 md:px-3 py-2 text-xs whitespace-nowrap hidden md:table-cell">{r.time}</td>
-                <td className="px-2 md:px-3 py-2 text-xs font-mono text-slate-500 whitespace-nowrap hidden md:table-cell">{r.gps}</td>
-                <td className="px-2 md:px-3 py-2 whitespace-nowrap hidden md:table-cell">{r.surveyor}</td>
-                <td className="px-2 md:px-3 py-2 whitespace-nowrap text-xs md:text-sm">{r.village === 'Unknown' ? <span className="text-slate-300">–</span> : r.village}</td>
-                <td className="px-2 md:px-3 py-2 font-mono text-xs whitespace-nowrap">{r.meter}</td>
-                <td className="px-2 md:px-3 py-2 font-semibold tabular-nums text-xs md:text-sm">{r.reading}</td>
-                <td className="px-2 md:px-3 py-2">
+                {COLUMNS.map((c) => (
+                  <td key={c.key} className={cellClass(c)}>{cellValue(c, r, standards)}</td>
+                ))}
+                <td className="px-2 md:px-3 py-2 whitespace-nowrap">
                   {r.photo
-                    ? <button onClick={() => setLightbox(r.photo)} className="text-brand-600 text-xs hover:underline">📷 view</button>
+                    ? <button onClick={() => setLightbox(r.photo)} className="text-brand-600 text-xs hover:underline">
+                        📷 {r.photosCount > 1 ? `×${r.photosCount} ` : ''}view
+                      </button>
                     : <span className="text-slate-300 text-xs">–</span>}
                 </td>
               </tr>

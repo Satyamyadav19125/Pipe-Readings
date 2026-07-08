@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { fetchSubmissions, findAttachmentUrl } from '@/lib/kobo';
-import { getActiveForm } from '@/lib/db';
+import { getActiveForm, getSettings } from '@/lib/db';
 import { filterSubmissionsForUser, applyUrlFilters } from '@/lib/filter';
 import { getField } from '@/lib/fieldMap';
 import { isAdmin } from '@/lib/auth';
@@ -52,6 +52,10 @@ export default async function KoboViewPage({ searchParams }) {
     const f = await getActiveForm();
     if (f?.assetUid) koboUrl = `${(f.baseUrl || 'https://kf.kobotoolbox.org').replace(/\/$/, '')}/#/forms/${f.assetUid}/data/table`;
   } catch { /* env not configured */ }
+  // Pipe standards from Settings -> Pipe parameters: the table colors Level
+  // and Outside cells that fall outside them, so bad measurements pop out.
+  let standards = null;
+  try { standards = (await getSettings())?.pipe || null; } catch { /* defaults */ }
   let submissions = [];
   let error = null;
   try { submissions = await fetchSubmissions(); }
@@ -164,7 +168,7 @@ export default async function KoboViewPage({ searchParams }) {
         <FilterBar />
       </Suspense>
 
-      <KoboTable rows={rows} />
+      <KoboTable rows={rows} standards={standards} />
     </div>
   );
 }

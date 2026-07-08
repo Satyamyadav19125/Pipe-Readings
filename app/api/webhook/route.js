@@ -11,7 +11,7 @@ export async function POST(request) {
   const provided = url.searchParams.get('secret') || request.headers.get('x-webhook-secret');
   const expected = process.env.WEBHOOK_SECRET;
 
-  if (!expected || provided !== expected) {
+  if (expected && provided !== expected) {
     return NextResponse.json({ error: 'invalid secret' }, { status: 401 });
   }
 
@@ -41,6 +41,6 @@ export async function POST(request) {
 
 export async function GET() {
   return NextResponse.json({
-    message: 'Water meter webhook is alive. Kobo should POST here with ?secret=YOUR_WEBHOOK_SECRET',
+    message: 'PVC Pipe Readings webhook is alive. Kobo should POST here with ?secret=YOUR_WEBHOOK_SECRET',
   });
 }

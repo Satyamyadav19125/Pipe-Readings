@@ -466,8 +466,8 @@ function ReadingTargets({ settings, setSettings }) {
     setSettings({ ...settings, reading: { ...r, periodDays: p.periodDays, periodLabel: p.periodLabel } });
   }
   const example = (Number(r.target) || 2) === 1
-    ? `Each meter needs 1 reading every ${r.periodLabel || 'week'} (${r.periodDays || 7} days).`
-    : `Each meter needs ${r.target || 2} readings every ${r.periodLabel || 'week'} (${r.periodDays || 7} days).`;
+    ? `Each pipe needs 1 reading every ${r.periodLabel || 'week'} (${r.periodDays || 7} days).`
+    : `Each pipe needs ${r.target || 2} readings every ${r.periodLabel || 'week'} (${r.periodDays || 7} days).`;
 
   return (
     <div className="space-y-3">
