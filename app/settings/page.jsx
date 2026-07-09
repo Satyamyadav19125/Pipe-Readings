@@ -84,7 +84,7 @@ export default function SettingsPage() {
       // Fill them with safe defaults so the page never crashes on access.
       setSettings({
         contact: {}, redFlags: {}, project: {}, forms: [],
-        pipe: { insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0 },
+        pipe: { insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0, irrigateAtOrBelowMm: 50 },
         security: { adminPasswords: [] },
         reading: {
           target: 2, periodLabel: 'week', periodDays: 7,
@@ -97,7 +97,7 @@ export default function SettingsPage() {
         project: { ...(data.settings.project || {}) },
         forms: Array.isArray(data.settings.forms) ? data.settings.forms : [],
         pipe: {
-          insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0,
+          insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0, irrigateAtOrBelowMm: 50,
           ...(data.settings.pipe || {}),
         },
         security: {
@@ -306,6 +306,16 @@ export default function SettingsPage() {
             </Field>
           </div>
           <p className="text-[11px] text-slate-500">Example: standard 150 with tolerance 0 means 140 or 160 raises <i>Outside height differs from the standard</i>. Set tolerance 10 to accept 140–160.</p>
+        </div>
+        <div className="border border-emerald-200 bg-emerald-50/40 rounded-lg p-3 space-y-2">
+          <div className="text-xs font-semibold text-slate-700">💧 AWD irrigation trigger</div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Irrigate at or below (mm)">
+              <input type="number" min="0" value={settings.pipe?.irrigateAtOrBelowMm ?? ''} placeholder="50"
+                onChange={(e) => updatePipe('irrigateAtOrBelowMm', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
+            </Field>
+          </div>
+          <p className="text-[11px] text-slate-500">A pipe whose <b>latest</b> inside water level is at or below this is marked <b style={{color:'#dc2626'}}>🔴 Irrigate now</b> on the Map (Irrigation mode) and Overview. Just above it shows <b style={{color:'#f59e0b'}}>🟠 Getting low</b>; higher is <b style={{color:'#2563eb'}}>🔵 Wet</b>. Clear the box to hide the irrigation view.</p>
         </div>
         <p className="text-[11px] text-slate-500">Clear any box to disable that check without touching the red-flag toggles.</p>
       </Section>

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { fetchSubmissions, fetchFormMaster } from '@/lib/kobo';
 import { computeWeeklyStatus, deriveMeters, daysRemaining } from '@/lib/weekly';
+import { latestPerPipe, irrigationThreshold } from '@/lib/irrigation';
 import { detectRedFlags } from '@/lib/redflags';
 import { getAssignments, isDbConfigured, getSettings, getMongoHealth, getVerifiedIds } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
@@ -81,6 +82,9 @@ export default async function HomePage() {
   const surveyorBars = Object.entries(surveyorCounts).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
 
   const meters = deriveMeters(assignments, submissions);
+  // AWD irrigation: how many pipes' LATEST reading says "irrigate now"
+  const irrThreshold = irrigationThreshold(settings?.pipe);
+  const { counts: irrCounts } = latestPerPipe(submissions, getField, irrThreshold);
   const target = Math.max(1, Number(settings?.reading?.target) || 2);
   const periodDays = Math.max(1, Number(settings?.reading?.periodDays) || 7);
   const periodLabel = String(settings?.reading?.periodLabel || 'week');
@@ -146,6 +150,10 @@ export default async function HomePage() {
           <Kpi label="Villages" value={uniqueVillages} color="bg-amber-50 text-amber-900" icon="🏘️" />
           <Kpi label="Active surveyors" value={uniqueSurveyors} color="bg-violet-50 text-violet-900" icon="👤" />
           <Kpi label={`This ${periodLabel}`} value={`${done}/${pipesTotal} done`} color="bg-sky-50 text-sky-900" icon="📅" />
+          {irrThreshold != null && (
+            <Kpi label="💧 Need irrigation" value={irrCounts.dry.toLocaleString()}
+              color={irrCounts.dry > 0 ? 'bg-red-50 text-red-900' : 'bg-slate-50 text-slate-700'} icon="🔴" />
+          )}
           <Kpi label={`Days left in ${periodLabel}`} value={remaining} color="bg-slate-100 text-slate-900" icon="⏳" />
         </div>
       ) : (

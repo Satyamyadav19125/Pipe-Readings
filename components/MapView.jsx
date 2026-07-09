@@ -67,7 +67,9 @@ function attachStreetFallback(L, map, tileLayerRef) {
   });
 }
 
-export default function MapView({ points = [], showFlagFilter = true }) {
+import { IRRIGATION_META } from '@/lib/irrigation';
+
+export default function MapView({ points = [], showFlagFilter = true, irrigation = null }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const tileLayerRef = useRef(null);
@@ -78,10 +80,13 @@ export default function MapView({ points = [], showFlagFilter = true }) {
   const [layer, setLayer] = useState('street');
   const [filterMode, setFilterMode] = useState('all');
   const [viewMode, setViewMode] = useState('pins');
+  const [colorMode, setColorMode] = useState('flags'); // 'flags' | 'irrigation'
+  const [irrFilter, setIrrFilter] = useState('all'); // all|dry|low|wet|na
   const [locating, setLocating] = useState(false);
 
   const flaggedCount = points.filter((p) => p.isFlagged).length;
   const cleanCount = points.length - flaggedCount;
+  const irrCount = (st) => points.filter((p) => p.isLatest && p.irrStatus === st).length;
 
   useEffect(() => {
     let cancelled = false;
@@ -107,13 +112,23 @@ export default function MapView({ points = [], showFlagFilter = true }) {
         setTimeout(() => { try { map.invalidateSize(); } catch {} }, 300);
         setTimeout(() => { try { map.invalidateSize(); } catch {} }, 1200);
 
-        const redIcon = pinIcon(L, 'red');
-        const blueIcon = pinIcon(L, 'blue');
+        const icons = {
+          red: pinIcon(L, 'red'), blue: pinIcon(L, 'blue'),
+          orange: pinIcon(L, 'orange'), grey: pinIcon(L, 'grey'),
+        };
         markersRef.current = [];
 
         for (const p of points) {
-          // If flag UI is hidden (surveyor view), every pin is blue regardless.
-          const icon = (showFlagFilter && p.isFlagged) ? redIcon : blueIcon;
+          // Two coloring modes:
+          //  • flags (default): red = flagged, blue = clean (admin only)
+          //  • irrigation: red = dry/irrigate, orange = low, blue = wet,
+          //    grey = no current reading (only the pipe's latest pin is colored)
+          let icon;
+          if (colorMode === 'irrigation' && irrigation) {
+            icon = icons[IRRIGATION_META[p.irrStatus || 'na'].pin] || icons.grey;
+          } else {
+            icon = (showFlagFilter && p.isFlagged) ? icons.red : icons.blue;
+          }
           const m = L.marker([p.lat, p.lng], { icon });
           const dir = `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
           const showRed = showFlagFilter && p.isFlagged;
@@ -135,6 +150,7 @@ export default function MapView({ points = [], showFlagFilter = true }) {
               <table style="width: 100%; font-size: 12px;">
                 <tr><td style="color:#64748b;padding:1px 0;">Pipe</td><td style="font-family:monospace;">${escapeHtml(p.serial)}</td></tr>
                 <tr><td style="color:#64748b;padding:1px 0;">Water level</td><td style="font-weight:600;">${escapeHtml(p.reading)} mm</td></tr>
+                ${(colorMode === 'irrigation' && irrigation && p.isLatest) ? `<tr><td style="color:#64748b;padding:1px 0;">Status</td><td style="font-weight:600;color:${IRRIGATION_META[p.irrStatus||'na'].color};">${IRRIGATION_META[p.irrStatus||'na'].emoji} ${IRRIGATION_META[p.irrStatus||'na'].label}</td></tr>` : ''}
                 <tr><td style="color:#64748b;padding:1px 0;">Outside height</td><td>${escapeHtml(p.validation ?? '—')} mm</td></tr>
                 <tr><td style="color:#64748b;padding:1px 0;">Form date</td><td>${escapeHtml(p.date ?? '—')}</td></tr>
                 <tr><td style="color:#64748b;padding:1px 0;">Surveyor</td><td>${escapeHtml(p.surveyor)}</td></tr>
@@ -148,7 +164,7 @@ export default function MapView({ points = [], showFlagFilter = true }) {
               </div>
             </div>`;
           m.bindPopup(popup);
-          markersRef.current.push({ marker: m, isFlagged: !!p.isFlagged, lat: p.lat, lng: p.lng });
+          markersRef.current.push({ marker: m, isFlagged: !!p.isFlagged, lat: p.lat, lng: p.lng, point: p });
         }
         applyView(map);
       } catch (e) { console.error('Leaflet load failed', e); }
@@ -156,9 +172,16 @@ export default function MapView({ points = [], showFlagFilter = true }) {
 
     return () => { cancelled = true; if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, showFlagFilter]);
+  }, [points, showFlagFilter, colorMode, irrigation]);
 
-  function matchesFilter(isFlagged) {
+  function matchesFilter(item) {
+    // item may be a marker-record (has .point) or a raw boolean (legacy)
+    const p = item && item.point ? item.point : null;
+    if (colorMode === 'irrigation' && irrigation) {
+      if (irrFilter === 'all') return true;
+      return p ? p.irrStatus === irrFilter : true;
+    }
+    const isFlagged = p ? p.isFlagged : item;
     if (!showFlagFilter) return true;
     return filterMode === 'all' || (filterMode === 'flagged' && isFlagged) || (filterMode === 'clean' && !isFlagged);
   }
@@ -172,13 +195,13 @@ export default function MapView({ points = [], showFlagFilter = true }) {
     heatTapRef.current = [];
     const shown = [];
     for (const item of markersRef.current) {
-      const show = viewMode === 'pins' && matchesFilter(item.isFlagged);
+      const show = viewMode === 'pins' && matchesFilter(item);
       if (show) { item.marker.addTo(m); shown.push(item.marker); }
       else { m.removeLayer(item.marker); }
     }
     if (viewMode === 'heat' && typeof L.heatLayer === 'function') {
       const heatPts = markersRef.current
-        .filter((i) => matchesFilter(i.isFlagged))
+        .filter((i) => matchesFilter(i))
         .map((i) => [i.lat, i.lng, i.isFlagged ? 1.0 : 0.5]);
       if (heatPts.length) {
         heatRef.current = L.heatLayer(heatPts, { radius: 28, blur: 18, maxZoom: 17, minOpacity: 0.35 }).addTo(m);
@@ -187,7 +210,7 @@ export default function MapView({ points = [], showFlagFilter = true }) {
       // target on every point, reusing the SAME popup as the pin view, so
       // tapping a heat blob opens the full submission details.
       for (const item of markersRef.current) {
-        if (!matchesFilter(item.isFlagged)) continue;
+        if (!matchesFilter(item)) continue;
         const popupContent = item.marker.getPopup()?.getContent?.() || '';
         const tap = L.circleMarker([item.lat, item.lng], {
           radius: 13, stroke: false, fillColor: '#f97316', fillOpacity: 0.06,
@@ -200,13 +223,13 @@ export default function MapView({ points = [], showFlagFilter = true }) {
     }
     const boundsSrc = viewMode === 'pins'
       ? shown
-      : markersRef.current.filter((i) => matchesFilter(i.isFlagged)).map((i) => i.marker);
+      : markersRef.current.filter((i) => matchesFilter(i)).map((i) => i.marker);
     if (boundsSrc.length > 0) {
       try { m.fitBounds(L.featureGroup(boundsSrc).getBounds().pad(0.2)); } catch {}
     }
   }
 
-  useEffect(() => { applyView(); /* eslint-disable-next-line */ }, [filterMode, viewMode]);
+  useEffect(() => { applyView(); /* eslint-disable-next-line */ }, [filterMode, viewMode, irrFilter, colorMode]);
 
   useEffect(() => {
     const L = window.L;
@@ -244,7 +267,7 @@ export default function MapView({ points = [], showFlagFilter = true }) {
 
   return (
     <div className="relative">
-      {showFlagFilter && (
+      {showFlagFilter && colorMode === 'flags' && (
         <div className="absolute top-2 left-12 sm:left-14 z-[450] bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs">
           <FilterBtn active={filterMode === 'all'} onClick={() => setFilterMode('all')}>All ({points.length})</FilterBtn>
           <FilterBtn active={filterMode === 'clean'} onClick={() => setFilterMode('clean')} color="text-sky-700">● Clean ({cleanCount})</FilterBtn>
@@ -252,10 +275,27 @@ export default function MapView({ points = [], showFlagFilter = true }) {
         </div>
       )}
 
-      <div className={`absolute ${showFlagFilter ? 'top-12' : 'top-2'} left-12 sm:left-14 z-[450] bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs`}>
-        <FilterBtn active={viewMode === 'pins'} onClick={() => setViewMode('pins')}>📍 Pins</FilterBtn>
-        <FilterBtn active={viewMode === 'heat'} onClick={() => setViewMode('heat')} color="text-orange-700">🔥 Heat map</FilterBtn>
+      <div className={`absolute ${showFlagFilter ? 'top-12' : 'top-2'} left-12 sm:left-14 z-[450] flex gap-1 flex-wrap`}>
+        <div className="bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs">
+          <FilterBtn active={viewMode === 'pins'} onClick={() => setViewMode('pins')}>📍 Pins</FilterBtn>
+          <FilterBtn active={viewMode === 'heat'} onClick={() => setViewMode('heat')} color="text-orange-700">🔥 Heat map</FilterBtn>
+        </div>
+        {irrigation && (
+          <div className="bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs">
+            <FilterBtn active={colorMode === 'flags'} onClick={() => setColorMode('flags')}>🚩 Flags</FilterBtn>
+            <FilterBtn active={colorMode === 'irrigation'} onClick={() => setColorMode('irrigation')} color="text-emerald-700">💧 Irrigation</FilterBtn>
+          </div>
+        )}
       </div>
+
+      {irrigation && colorMode === 'irrigation' && (
+        <div className="absolute top-[5.5rem] sm:top-[5.5rem] left-12 sm:left-14 z-[450] bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs flex-wrap">
+          <FilterBtn active={irrFilter === 'all'} onClick={() => setIrrFilter('all')}>All pipes</FilterBtn>
+          <FilterBtn active={irrFilter === 'dry'} onClick={() => setIrrFilter('dry')} color="text-red-700">🔴 Irrigate ({irrCount('dry')})</FilterBtn>
+          <FilterBtn active={irrFilter === 'low'} onClick={() => setIrrFilter('low')} color="text-amber-700">🟠 Low ({irrCount('low')})</FilterBtn>
+          <FilterBtn active={irrFilter === 'wet'} onClick={() => setIrrFilter('wet')} color="text-blue-700">🔵 Wet ({irrCount('wet')})</FilterBtn>
+        </div>
+      )}
 
       <div className="absolute top-2 right-2 z-[450] bg-white rounded-lg shadow flex flex-col p-1 gap-0.5">
         {Object.entries(TILE_LAYERS).map(([k, v]) => (

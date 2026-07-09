@@ -6,6 +6,7 @@ import { detectRedFlags } from '@/lib/redflags';
 import { getSettings, getVerifiedIds } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import MapView from '@/components/MapView';
+import { latestPerPipe, irrigationThreshold, irrigationStatus } from '@/lib/irrigation';
 import FilterBar from '@/components/FilterBar';
 import MapExportButton from '@/components/MapExportButton';
 
@@ -44,6 +45,11 @@ export default async function MapPage({ searchParams }) {
   const flags = isAdmin ? detectRedFlags(scoped0, { enabled: settings?.redFlags, pipe: settings?.pipe }) : {};
   const scoped = applyUrlFilters(scoped0, sp);
 
+  // Irrigation status is per-PIPE (its latest reading), not per-submission.
+  const irrThreshold = irrigationThreshold(settings?.pipe);
+  const { byPipe: latestByPipe, counts: irrCounts } = latestPerPipe(scoped, getField, irrThreshold);
+  const latestIds = new Set([...latestByPipe.values()].map((v) => String(v.id)));
+
   const points = [];
   for (const s of scoped) {
     const loc = parseLocation(getField(s, 'location')) || parseLocation(s._geolocation);
@@ -62,6 +68,10 @@ export default async function MapPage({ searchParams }) {
         time: s._submission_time,
         isFlagged: flagged,
         flagTypes: flagged ? f.flags.map((x) => x.type) : [],
+        // Only the pipe's LATEST submission carries an irrigation status; older
+        // pins for the same pipe are 'na' so the map shows one status per pipe.
+        irrStatus: latestIds.has(String(s._id)) ? irrigationStatus(getField(s, 'endReading') ?? getField(s, 'reading'), irrThreshold) : 'na',
+        isLatest: latestIds.has(String(s._id)),
       });
     }
   }
@@ -85,6 +95,16 @@ export default async function MapPage({ searchParams }) {
               {flaggedNoGps > 0 && <span className="text-slate-400"> ({flaggedNoGps} without GPS — not on map)</span>}</>}
             {' '}· tap a pin for details
           </p>
+          {irrThreshold != null && (
+            <p className="text-sm mt-0.5">
+              <span className="text-slate-500">💧 Irrigation (latest per pipe): </span>
+              <span className="text-red-600 font-medium">{irrCounts.dry} dry</span>
+              <span className="text-slate-400"> · </span>
+              <span className="text-amber-600 font-medium">{irrCounts.low} low</span>
+              <span className="text-slate-400"> · </span>
+              <span className="text-blue-600 font-medium">{irrCounts.wet} wet</span>
+            </p>
+          )}
         </div>
         <Suspense fallback={<div className="h-9 w-32 bg-slate-200 rounded animate-pulse" />}>
           <MapExportButton />
@@ -101,7 +121,8 @@ export default async function MapPage({ searchParams }) {
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow overflow-hidden">
-          <MapView points={points} showFlagFilter={isAdmin} />
+          <MapView points={points} showFlagFilter={isAdmin}
+            irrigation={irrThreshold != null ? { threshold: irrThreshold, counts: irrCounts } : null} />
         </div>
       )}
     </div>
