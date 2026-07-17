@@ -13,6 +13,12 @@ const FLAG_LABELS = {
   inside_out_of_range: 'Inside reading outside the valid range (see Pipe parameters)',
   outside_out_of_range: 'Outside height differs from the standard (see Pipe parameters)',
   missing_times: 'Start or end time missing on a submission',
+  // Advanced — usually OFF for AWD pipes, because water levels naturally rise
+  // and fall. Turn on only if your protocol expects levels to only increase.
+  rollback: 'Water level dropped vs the previous reading',
+  huge_jump: 'Water level jumped by a huge amount (likely extra digit)',
+  growth_anomaly: 'Water level rose far faster than usual for this pipe',
+  reverse: 'End reading lower than start reading (within one submission)',
   // Opt-in extras (off by default)
   duplicate_same_day: 'Same pipe read twice in one day',
   gps_outlier: "GPS far from this pipe's usual spot",
