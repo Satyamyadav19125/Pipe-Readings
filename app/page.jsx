@@ -2,12 +2,13 @@ import Link from 'next/link';
 import { fetchSubmissions, fetchFormMaster } from '@/lib/kobo';
 import { computeWeeklyStatus, deriveMeters, daysRemaining } from '@/lib/weekly';
 import { latestPerPipe, irrigationThreshold } from '@/lib/irrigation';
-import { detectRedFlags } from '@/lib/redflags';
+import { detectFlagsScoped } from '@/lib/flagContext';
 import { getAssignments, isDbConfigured, getSettings, getMongoHealth, getVerifiedIds } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { filterSubmissionsForUser, filterAssignmentsForUser } from '@/lib/filter';
 import { getField } from '@/lib/fieldMap';
 import { BarChart, DonutChart } from '@/components/SimpleCharts';
+import FarmBreakdown from '@/components/FarmBreakdown';
 import Landing from '@/components/Landing';
 
 export const dynamic = 'force-dynamic';
@@ -58,7 +59,7 @@ export default async function HomePage() {
   if (isAdmin) {
     let verifiedIds = new Set();
     try { verifiedIds = await getVerifiedIds(); } catch {}
-    const rawFlags = detectRedFlags(submissions, { enabled: settings?.redFlags, pipe: settings?.pipe });
+    const rawFlags = await detectFlagsScoped(submissions, settings);
     const flags = {};
     for (const id in rawFlags) { if (!verifiedIds.has(String(id))) flags[id] = rawFlags[id]; }
     flaggedTotal = Object.keys(flags).length;
@@ -67,12 +68,23 @@ export default async function HomePage() {
 
   const villageCounts = {};
   const surveyorCounts = {};
+  const farmCounts = {}; // farm ID -> number of submissions
   for (const s of submissions) {
     const v = getField(s, 'village') || 'Unknown';
     const sv = getField(s, 'surveyor') || 'Unknown';
+    const fm = getField(s, 'farm');
     villageCounts[v] = (villageCounts[v] || 0) + 1;
     surveyorCounts[sv] = (surveyorCounts[sv] || 0) + 1;
+    if (fm) farmCounts[fm] = (farmCounts[fm] || 0) + 1;
   }
+  // Total distinct farms = every farm from the form definition (so farms not
+  // yet read still count), falling back to farms seen in submissions.
+  const allFarms = new Set(Object.keys(farmCounts));
+  if (master.ok) for (const pm of master.pipes) if (pm.farm) allFarms.add(pm.farm);
+  const totalFarms = allFarms.size;
+  const farmRows = [...allFarms]
+    .map((farm) => ({ farm, count: farmCounts[farm] || 0 }))
+    .sort((a, b) => b.count - a.count);
   const uniqueVillages = !isAdmin
     ? (currentUser.villages || []).length
     : new Set([...Object.keys(villageCounts).filter((v) => v !== 'Unknown'), ...(master.ok ? master.villages : [])]).size;
@@ -147,6 +159,7 @@ export default async function HomePage() {
           <Kpi label="Clean readings" value={cleanTotal.toLocaleString()} color="bg-field-50 text-field-900" icon="✓" />
           <Kpi label="🚩 Flagged" value={flaggedTotal.toLocaleString()} color={flaggedTotal > 0 ? 'bg-red-50 text-red-900' : 'bg-slate-50 text-slate-700'} icon="" />
           <Kpi label="Quality rate" value={submissions.length > 0 ? `${Math.round((cleanTotal / submissions.length) * 100)}%` : '—'} color="bg-emerald-50 text-emerald-900" icon="📊" />
+          {isAdmin && <Kpi label="🌾 Total farms" value={totalFarms.toLocaleString()} color="bg-lime-50 text-lime-900" icon="" />}
           <Kpi label="Villages" value={uniqueVillages} color="bg-amber-50 text-amber-900" icon="🏘️" />
           <Kpi label="Active surveyors" value={uniqueSurveyors} color="bg-violet-50 text-violet-900" icon="👤" />
           <Kpi label={`This ${periodLabel}`} value={`${done}/${pipesTotal} done`} color="bg-sky-50 text-sky-900" icon="📅" />
@@ -184,6 +197,13 @@ export default async function HomePage() {
             <VerticalBars data={surveyorBars} color="#7c3aed" />
           </Card>
         </div>
+      )}
+
+      {/* Farms — how many forms each farm ID has, with on/off in Settings */}
+      {isAdmin && (
+        <Card title="🌾 Forms per farm" subtitle={`${totalFarms} farms · turn farms on/off in Settings → Farms & pipes`}>
+          <FarmBreakdown rows={farmRows} />
+        </Card>
       )}
 
       <Card title={isAdmin ? 'Submissions per village' : 'My submissions per village'} subtitle={isAdmin ? 'Top 8' : 'Your assigned villages'}>

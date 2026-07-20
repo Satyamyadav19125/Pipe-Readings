@@ -136,6 +136,8 @@ function SubmissionDetail({ submission, flag, isVerified, canVerify, busy, onTog
         </div>
       )}
 
+      {canVerify && <ReadingCorrection submission={submission} />}
+
       {previous ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <SubmissionPanel label="Previous reading" submission={previous} highlight="emerald" />
@@ -143,6 +145,90 @@ function SubmissionDetail({ submission, flag, isVerified, canVerify, busy, onTog
         </div>
       ) : (
         <SubmissionPanel label="Form data" submission={submission} />
+      )}
+    </div>
+  );
+}
+
+// Admin-only manual reading correction. The RAW Kobo value is never touched;
+// the tool stores an override (pipe + submission -> corrected value) and uses
+// it everywhere from now on, so the wrong value stops triggering red flags.
+// Shows old -> new and lets the admin revert to the raw value.
+function ReadingCorrection({ submission }) {
+  const existing = submission._correction || null;
+  const rawValue = existing ? existing.oldValue : (submission['group_2/Readings_mm'] ?? submission.reading ?? '');
+  const [open, setOpen] = useState(false);
+  const [newValue, setNewValue] = useState(existing ? existing.newValue : '');
+  const [note, setNote] = useState(existing ? (existing.note || '') : '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function save() {
+    if (String(newValue).trim() === '') { setErr('Enter the corrected reading.'); return; }
+    setBusy(true); setErr('');
+    try {
+      const res = await fetch('/api/corrections', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissionId: submission._id, oldValue: rawValue, newValue: String(newValue).trim(), note }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+      window.location.reload();
+    } catch (e) { setErr(e.message); setBusy(false); }
+  }
+  async function revert() {
+    setBusy(true); setErr('');
+    try {
+      const res = await fetch(`/api/corrections?id=${encodeURIComponent(submission._id)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error || 'Revert failed');
+      window.location.reload();
+    } catch (e) { setErr(e.message); setBusy(false); }
+  }
+
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+      {existing && (
+        <div className="mb-2 text-sm">
+          <span className="font-semibold text-amber-900">✎ Reading corrected</span>
+          <div className="mt-1 flex items-center gap-2 flex-wrap">
+            <span className="line-through text-slate-500">{existing.oldValue ?? '—'}</span>
+            <span className="text-slate-400">→</span>
+            <span className="font-bold text-emerald-700">{existing.newValue}</span>
+            <span className="text-xs text-slate-500">mm</span>
+          </div>
+          {existing.note && <div className="text-xs text-slate-600 mt-1">Note: {existing.note}</div>}
+          <div className="text-[11px] text-slate-500 mt-0.5">by {existing.by || 'admin'}{existing.at ? ` · ${new Date(existing.at).toLocaleDateString()}` : ''}. The tool uses the corrected value everywhere; raw Kobo data is untouched.</div>
+        </div>
+      )}
+      {!open ? (
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => { setOpen(true); setNewValue(existing ? existing.newValue : ''); }}
+            className="text-xs px-3 py-1.5 rounded-lg border border-amber-400 text-amber-800 hover:bg-amber-100">
+            {existing ? '✎ Edit correction' : '✎ Correct this reading'}
+          </button>
+          {existing && (
+            <button onClick={revert} disabled={busy}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+              ↺ Revert to raw ({existing.oldValue ?? '—'})
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="text-xs text-slate-600">Raw Kobo reading: <b>{rawValue || '—'}</b> mm — enter the corrected value:</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input type="number" value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="e.g. 2000"
+              className="w-28 px-2 py-1.5 rounded border border-slate-300 text-sm" />
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Reason (optional, e.g. missing zero)"
+              className="flex-1 min-w-[140px] px-2 py-1.5 rounded border border-slate-300 text-sm" />
+          </div>
+          {err && <div className="text-xs text-red-600">{err}</div>}
+          <div className="flex gap-2">
+            <button onClick={save} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 disabled:opacity-50">
+              {busy ? 'Saving…' : 'Save correction'}
+            </button>
+            <button onClick={() => { setOpen(false); setErr(''); }} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600">Cancel</button>
+          </div>
+        </div>
       )}
     </div>
   );

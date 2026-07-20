@@ -36,6 +36,8 @@ const SECTIONS = [
   { id: 'project',  icon: '🌱', label: 'Project info',    hint: 'Name & description' },
   { id: 'reading',  icon: '🎯', label: 'Reading targets', hint: 'Count & period' },
   { id: 'pipe',     icon: '📏', label: 'Pipe parameters', hint: 'Valid mm ranges' },
+  { id: 'geofence', icon: '📍', label: 'Pipe locations', hint: 'Geofence & Sheet' },
+  { id: 'registry', icon: '🎚️', label: 'Farms & pipes',  hint: 'Turn on/off' },
   { id: 'security', icon: '🔐', label: 'Admin passwords', hint: 'Change admin login' },
   { id: 'photo',    icon: '🖼️', label: 'Photo quality',  hint: 'HD vs space' },
   { id: 'contact',  icon: '📬', label: 'Contact info',    hint: 'Emails & phone' },
@@ -148,6 +150,7 @@ export default function SettingsPage() {
   function updateContact(k, v) { setS({ ...settings, contact: { ...settings.contact, [k]: v } }); }
   function updateFlag(k, v) { setS({ ...settings, redFlags: { ...settings.redFlags, [k]: v } }); }
   function updatePipe(k, v) { setS({ ...settings, pipe: { ...(settings.pipe || {}), [k]: v } }); }
+  function updateGeofence(k, v) { setS({ ...settings, pipe: { ...(settings.pipe || {}), geofence: { ...((settings.pipe || {}).geofence || {}), [k]: v } } }); }
   function updateSecurity(list) { setS({ ...settings, security: { ...(settings.security || {}), adminPasswords: list } }); }
   function updateProject(k, v) { setS({ ...settings, project: { ...settings.project, [k]: v } }); }
 
@@ -324,6 +327,18 @@ export default function SettingsPage() {
           <p className="text-[11px] text-slate-500">A pipe whose <b>latest</b> inside water level is at or below this is marked <b style={{color:'#dc2626'}}>🔴 Irrigate now</b> on the Map (Irrigation mode) and Overview. Just above it shows <b style={{color:'#f59e0b'}}>🟠 Getting low</b>; higher is <b style={{color:'#2563eb'}}>🔵 Wet</b>. Clear the box to hide the irrigation view.</p>
         </div>
         <p className="text-[11px] text-slate-500">Clear any box to disable that check without touching the red-flag toggles.</p>
+      </Section>
+
+      {/* Pipe locations — geofence radius + Google Sheet of reference points */}
+      <Section id="geofence" title="📍 Pipe locations & geofence"
+        subtitle="Set a fixed reference location per pipe. A submission whose GPS is farther than the radius gets the 'outside set location' red flag.">
+        <GeofencePanel settings={settings} setSettings={setS} />
+      </Section>
+
+      {/* Farms & pipes on/off registry */}
+      <Section id="registry" title="🎚️ Turn farms & pipes on/off"
+        subtitle="Disabled farms and pipes disappear from the surveyor's view, are never counted as missed, and never raise red flags.">
+        <RegistryPanel />
       </Section>
 
       {/* Admin passwords — change admin login without touching Vercel */}
@@ -557,6 +572,194 @@ function PhotoQuality({ settings, setSettings }) {
       <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-sm text-amber-900">
         <b>Database budget:</b> the free MongoDB tier is 512 MB total. At 1600 px the pipe photos are sharp and zoom-friendly; at 2400 px they're near-original phone quality. Profile photos are small so 600 px is plenty.
       </div>
+    </div>
+  );
+}
+
+// ---- Geofence panel: radius + toggle + Google Sheet sync of pipe locations ----
+function GeofencePanel({ settings, setSettings }) {
+  const geo = (settings.pipe || {}).geofence || {};
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    fetch('/api/pipe-locations').then((r) => r.json()).then(setStatus).catch(() => {});
+  }, []);
+
+  function upd(k, v) {
+    setSettings({ ...settings, pipe: { ...(settings.pipe || {}), geofence: { ...geo, [k]: v } } });
+  }
+
+  async function syncNow() {
+    setBusy(true); setMsg('');
+    try {
+      // Save current settings first so the sheet URL is persisted, then pull.
+      await fetch('/api/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      });
+      const res = await fetch('/api/pipe-locations', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sheetUrl: geo.sheetUrl }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Sync failed');
+      setMsg(`✓ Loaded ${d.parsed} pipe locations${d.skipped ? ` · skipped ${d.skipped} unreadable row(s)` : ''}.`);
+      setStatus({ count: d.parsed, syncedAt: new Date().toISOString(), sample: d.sample || [] });
+    } catch (e) { setMsg(`⚠️ ${e.message}`); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="space-y-3">
+      <Toggle label="Flag readings taken outside a pipe's set location"
+        checked={geo.enabled === true} onChange={(v) => upd('enabled', v)} />
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Radius (metres)">
+          <input type="number" min="1" value={geo.radiusMeters ?? 50}
+            onChange={(e) => upd('radiusMeters', e.target.value === '' ? '' : Number(e.target.value))} className="input" />
+        </Field>
+      </div>
+
+      <div className="border-t border-slate-100 pt-3 space-y-2">
+        <Field label="Google Sheet URL (reference locations)">
+          <input value={geo.sheetUrl || ''} onChange={(e) => upd('sheetUrl', e.target.value)}
+            placeholder="https://docs.google.com/spreadsheets/d/…" className="input" />
+        </Field>
+        <button onClick={syncNow} disabled={busy || !geo.sheetUrl}
+          className="px-3 py-2 text-sm rounded-lg bg-brand-600 text-white font-medium hover:bg-brand-700 disabled:opacity-50">
+          {busy ? 'Syncing…' : '⟳ Sync locations from sheet now'}
+        </button>
+        {msg && <div className="text-xs text-slate-700">{msg}</div>}
+        {status && (
+          <div className="text-xs text-slate-500">
+            {status.count > 0
+              ? <>Currently {status.count} pipe location{status.count === 1 ? '' : 's'} loaded{status.syncedAt ? ` · synced ${new Date(status.syncedAt).toLocaleString()}` : ''}.</>
+              : 'No pipe locations loaded yet.'}
+            {Array.isArray(status.sample) && status.sample.length > 0 && (
+              <div className="mt-1 font-mono">e.g. {status.sample.map(([k, v]) => `${k}→${v.lat?.toFixed(5)},${v.lng?.toFixed(5)}`).slice(0, 3).join('  ')}</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-sky-50 border border-sky-100 rounded-lg p-3 text-xs text-sky-900 space-y-1">
+        <div className="font-semibold">📄 How to set up the sheet</div>
+        <p>Two columns, with a header row:</p>
+        <p><b>Column A</b> = Pipe ID (exactly as in Kobo, e.g. <span className="font-mono">MU_10068A</span>). <b>Column B</b> = location as <span className="font-mono">lat, lng</span>.</p>
+        <p>Location can be decimal (<span className="font-mono">30.4219, 76.3615</span>) or degrees (<span className="font-mono">30°25'19"N 76°21'41"E</span>) — both are read automatically.</p>
+        <p>Share the sheet as <b>Anyone with the link – Viewer</b> (or File → Share → Publish to web), then paste the link above and hit Sync.</p>
+      </div>
+    </div>
+  );
+}
+
+// ---- Registry panel: turn farms and pipes on/off ----
+function RegistryPanel() {
+  const [master, setMaster] = useState(null);      // { villages, pipes:[{serial,farm,village}] }
+  const [offFarms, setOffFarms] = useState(new Set());
+  const [offPipes, setOffPipes] = useState(new Set());
+  const [q, setQ] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/registry').then((r) => r.json()).catch(() => ({ farms: [], pipes: [] })),
+      fetch('/api/villages').then((r) => r.json()).catch(() => ({ pipes: [] })),
+    ]).then(([reg, vil]) => {
+      setOffFarms(new Set((reg.farms || []).map(String)));
+      setOffPipes(new Set((reg.pipes || []).map(String)));
+      setMaster(vil);
+      setLoaded(true);
+    });
+  }, []);
+
+  // Group the master pipe list by farm for a compact on/off tree.
+  const farms = {};
+  if (master?.pipes) {
+    for (const p of master.pipes) {
+      const farm = p.farm || '(no farm)';
+      if (!farms[farm]) farms[farm] = { village: p.village, pipes: [] };
+      farms[farm].pipes.push(p.serial);
+    }
+  }
+  const farmList = Object.entries(farms)
+    .filter(([farm]) => !q || farm.toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  function toggleSet(setter, set, key) {
+    const next = new Set(set);
+    next.has(key) ? next.delete(key) : next.add(key);
+    setter(next);
+  }
+  async function save() {
+    setBusy(true); setMsg('');
+    try {
+      const res = await fetch('/api/registry', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ farms: [...offFarms], pipes: [...offPipes] }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+      setMsg('✓ Saved. Disabled farms/pipes are now hidden from surveyors.');
+    } catch (e) { setMsg(`⚠️ ${e.message}`); }
+    setBusy(false);
+  }
+
+  if (!loaded) return <div className="text-sm text-slate-500">Loading farms & pipes…</div>;
+  if (!master?.pipes?.length) return <div className="text-sm text-slate-500">No pipe list available from the Kobo form yet.</div>;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search farm ID…"
+          className="input flex-1 min-w-[160px]" />
+        <span className="text-xs text-slate-500">{offFarms.size} farms · {offPipes.size} pipes off</span>
+      </div>
+
+      <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-[26rem] overflow-y-auto">
+        {farmList.map(([farm, info]) => {
+          const farmOff = offFarms.has(farm);
+          return (
+            <div key={farm} className={`p-2.5 ${farmOff ? 'bg-slate-50 opacity-70' : ''}`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-mono text-xs font-semibold truncate">{farm}</div>
+                  <div className="text-[11px] text-slate-500">{info.village} · {info.pipes.length} pipe(s)</div>
+                </div>
+                <button onClick={() => toggleSet(setOffFarms, offFarms, farm)}
+                  className={`shrink-0 text-xs px-2.5 py-1 rounded-full border ${farmOff ? 'bg-slate-200 text-slate-600 border-slate-300' : 'bg-emerald-50 text-emerald-700 border-emerald-300'}`}>
+                  {farmOff ? '○ Off' : '● On'}
+                </button>
+              </div>
+              {!farmOff && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {info.pipes.map((serial) => {
+                    const pipeOff = offPipes.has(serial);
+                    return (
+                      <button key={serial} onClick={() => toggleSet(setOffPipes, offPipes, serial)}
+                        className={`text-[11px] font-mono px-2 py-0.5 rounded border ${pipeOff ? 'bg-slate-100 text-slate-400 border-slate-200 line-through' : 'bg-white text-slate-700 border-slate-300'}`}>
+                        {serial}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button onClick={save} disabled={busy}
+          className="px-3 py-2 text-sm rounded-lg bg-brand-600 text-white font-medium hover:bg-brand-700 disabled:opacity-50">
+          {busy ? 'Saving…' : 'Save farm & pipe settings'}
+        </button>
+        {msg && <span className="text-xs text-slate-700">{msg}</span>}
+      </div>
+      <p className="text-[11px] text-slate-500">Tap a farm's <b>On/Off</b> to disable the whole plot, or tap individual pipe codes to disable just those. Disabled units vanish from surveyors, are excluded from red flags, and don't count toward missed readings.</p>
     </div>
   );
 }

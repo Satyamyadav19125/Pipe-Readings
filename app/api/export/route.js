@@ -1,6 +1,6 @@
 import { fetchSubmissions } from '@/lib/kobo';
 import { filterSubmissionsForUser, applyUrlFilters } from '@/lib/filter';
-import { detectRedFlags } from '@/lib/redflags';
+import { detectFlagsScoped } from '@/lib/flagContext';
 import { toCsv, toJson, toLabeledRows, buildSummary } from '@/lib/export';
 
 export async function GET(request) {
@@ -14,7 +14,7 @@ export async function GET(request) {
     subs = applyUrlFilters(subs, searchParams);
 
     if (flagFilter !== 'all') {
-      const flags = detectRedFlags(subs);
+      const flags = await detectFlagsScoped(subs);
       if (flagFilter === 'flagged') subs = subs.filter((s) => flags[s._id]);
       if (flagFilter === 'clean') subs = subs.filter((s) => !flags[s._id]);
     }

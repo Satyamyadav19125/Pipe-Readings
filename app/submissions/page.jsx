@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { fetchSubmissions } from '@/lib/kobo';
-import { detectRedFlags } from '@/lib/redflags';
+import { detectFlagsScoped } from '@/lib/flagContext';
 import { getSettings, getVerifiedIds } from '@/lib/db';
 import { filterSubmissionsForUser, applyUrlFilters } from '@/lib/filter';
 import { getCurrentUser } from '@/lib/auth';
@@ -31,6 +31,8 @@ export default async function SubmissionsPage({ searchParams }) {
 
   const currentUser = await getCurrentUser();
   const isAdmin = currentUser?.role === 'admin';
+  // Item 7: a surveyor sees their own flags only if the admin enabled it.
+  const canSeeFlags = isAdmin || currentUser?.showFlags === true;
 
   const scopedAll = await filterSubmissionsForUser(allSubmissions);
 
@@ -38,14 +40,14 @@ export default async function SubmissionsPage({ searchParams }) {
   // colouring, or "this submission was flagged" warnings — quality review
   // is the admin's job, not theirs. Their view stays positive and focused
   // on their own work.
-  const allFlags = isAdmin ? detectRedFlags(scopedAll, { enabled: settings?.redFlags, pipe: settings?.pipe }) : {};
-  const isRed = (id) => isAdmin && !!allFlags[id] && !verifiedIds.has(String(id));
+  const allFlags = canSeeFlags ? await detectFlagsScoped(scopedAll, settings) : {};
+  const isRed = (id) => canSeeFlags && !!allFlags[id] && !verifiedIds.has(String(id));
 
   const filtered0 = applyUrlFilters(scopedAll, sp);
-  const redCount = isAdmin ? filtered0.filter((s) => isRed(s._id)).length : 0;
-  const flagFilter = isAdmin ? (sp.flag || 'all') : 'all';
+  const redCount = canSeeFlags ? filtered0.filter((s) => isRed(s._id)).length : 0;
+  const flagFilter = canSeeFlags ? (sp.flag || 'all') : 'all';
   const filtered = filtered0.filter((s) => {
-    if (!isAdmin) return true;
+    if (!canSeeFlags) return true;
     if (flagFilter === 'flagged') return isRed(s._id);
     if (flagFilter === 'clean') return !isRed(s._id);
     return true;
@@ -54,7 +56,7 @@ export default async function SubmissionsPage({ searchParams }) {
   const sorted = [...filtered].sort(
     (a, b) => new Date(b._submission_time).getTime() - new Date(a._submission_time).getTime()
   );
-  const filteredFlagCount = isAdmin ? sorted.filter((s) => isRed(s._id)).length : 0;
+  const filteredFlagCount = canSeeFlags ? sorted.filter((s) => isRed(s._id)).length : 0;
 
   return (
     <div className="space-y-4">
@@ -63,7 +65,7 @@ export default async function SubmissionsPage({ searchParams }) {
           <h2 className="text-xl font-semibold">{isAdmin ? 'Submissions' : 'My Submissions'}</h2>
           <p className="text-sm text-slate-500">
             {sorted.length} shown
-            {isAdmin && <> · {filteredFlagCount} flagged</>}
+            {canSeeFlags && <> · {filteredFlagCount} flagged</>}
             {!isAdmin && <> · only the readings you sent</>}
           </p>
         </div>
@@ -76,12 +78,19 @@ export default async function SubmissionsPage({ searchParams }) {
         <FilterBar />
       </Suspense>
 
-      {isAdmin && (
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          <FlagChip name="all" current={flagFilter} sp={sp}>All</FlagChip>
-          <FlagChip name="clean" current={flagFilter} sp={sp}>✓ Clean</FlagChip>
-          <FlagChip name="flagged" current={flagFilter} sp={sp} danger>🚩 Flagged ({redCount})</FlagChip>
-        </div>
+      {canSeeFlags && (
+        <>
+          {!isAdmin && (
+            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              These are readings the reviewer flagged for you to double-check.
+            </div>
+          )}
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            <FlagChip name="all" current={flagFilter} sp={sp}>All</FlagChip>
+            <FlagChip name="clean" current={flagFilter} sp={sp}>✓ Clean</FlagChip>
+            <FlagChip name="flagged" current={flagFilter} sp={sp} danger>🚩 Flagged ({redCount})</FlagChip>
+          </div>
+        </>
       )}
 
       <SubmissionList
@@ -89,7 +98,7 @@ export default async function SubmissionsPage({ searchParams }) {
         flags={allFlags}
         allSubmissions={scopedAll}
         canVerify={isAdmin}
-        verifiedIds={isAdmin ? Array.from(verifiedIds) : []}
+        verifiedIds={canSeeFlags ? Array.from(verifiedIds) : []}
       />
     </div>
   );

@@ -208,6 +208,13 @@ export default function AssignmentsPage() {
                     <Field label="Bio">
                       <input value={person.bio || ''} onChange={(e) => updatePerson(i, 'bio', e.target.value)} placeholder="Short bio" className="aw-input"/>
                     </Field>
+                    <label className="flex items-center gap-2 mt-1 cursor-pointer select-none">
+                      <input type="checkbox" checked={person.showFlags === true}
+                        onChange={(e) => updatePerson(i, 'showFlags', e.target.checked)}
+                        className="w-4 h-4 accent-brand-600" />
+                      <span className="text-sm text-slate-700">🚩 Let this surveyor see their own red flags</span>
+                    </label>
+                    <p className="text-[11px] text-slate-500 -mt-1 ml-6">When on, {person.person || 'this surveyor'} sees the mistakes flagged on their submissions. When off (default), they only see a clean positive view.</p>
                   </div>
                 ) : (
                   <div className="text-xs text-slate-600">

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { fetchSubmissions } from '@/lib/kobo';
 import { computeConsumption } from '@/lib/weekly';
 import { filterSubmissionsForUser, applyUrlFilters } from '@/lib/filter';
-import { detectRedFlags } from '@/lib/redflags';
+import { detectFlagsScoped } from '@/lib/flagContext';
 import { getSettings, getVerifiedIds } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import FilterBar from '@/components/FilterBar';
@@ -36,7 +36,7 @@ export default async function UsagePage({ searchParams }) {
   // Surveyors don't see flag info. They just see their consumption history.
   const flags = {};
   if (isAdmin) {
-    const rawFlags = detectRedFlags(scoped, { enabled: settings?.redFlags, pipe: settings?.pipe });
+    const rawFlags = await detectFlagsScoped(scoped, settings);
     for (const id in rawFlags) { if (!verifiedIds.has(String(id))) flags[id] = rawFlags[id]; }
   }
 

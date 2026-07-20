@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { fetchSubmissions } from '@/lib/kobo';
 import { filterSubmissionsForUser, applyUrlFilters } from '@/lib/filter';
 import { getField } from '@/lib/fieldMap';
-import { detectRedFlags } from '@/lib/redflags';
+import { detectFlagsScoped } from '@/lib/flagContext';
 import { getSettings, getVerifiedIds } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import MapView from '@/components/MapView';
@@ -42,7 +42,7 @@ export default async function MapPage({ searchParams }) {
 
   const scoped0 = await filterSubmissionsForUser(submissions);
   // Surveyors see all their pins as clean — no red flag indicators on the map.
-  const flags = isAdmin ? detectRedFlags(scoped0, { enabled: settings?.redFlags, pipe: settings?.pipe }) : {};
+  const flags = isAdmin ? await detectFlagsScoped(scoped0, settings) : {};
   const scoped = applyUrlFilters(scoped0, sp);
 
   // Irrigation status is per-PIPE (its latest reading), not per-submission.
