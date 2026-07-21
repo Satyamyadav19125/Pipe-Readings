@@ -67,16 +67,21 @@ function SubmissionCard({ submission, isOpen, flag, isVerified, canVerify, busy,
   const surveyor = getField(s, 'surveyor');
   const time = new Date(s._submission_time);
   const showRed = flag && !isVerified;
-  const cardClass = showRed ? 'bg-red-50 border-red-200' : isVerified && flag ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200';
+  const corr = s._correction || null;
+  const isDead = corr && corr.field === 'dead';
+  const cardClass = isDead ? 'bg-slate-100 border-slate-300 opacity-75'
+    : showRed ? 'bg-red-50 border-red-200' : isVerified && flag ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200';
 
   return (
     <div className={`rounded-lg shadow-sm border overflow-hidden ${cardClass}`}>
       <button onClick={onToggle} className="w-full text-left p-3 sm:p-4 flex items-center gap-3 hover:bg-black/[0.02]">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            {showRed && <span className="text-red-600">🚩</span>}
+            {isDead && <span title="Dead reading — ignored by the tool">🗑️</span>}
+            {!isDead && showRed && <span className="text-red-600">🚩</span>}
+            {!isDead && corr && <span title="Reading corrected">✎</span>}
             {isVerified && flag && <span className="text-emerald-600" title="Marked correct by admin">✓</span>}
-            <span className="font-medium truncate">{village || '—'}</span>
+            <span className={`font-medium truncate ${isDead ? 'line-through text-slate-500' : ''}`}>{village || '—'}</span>
             {surveyor && <span className="text-xs text-slate-500 truncate">· {surveyor}</span>}
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-600">
@@ -85,7 +90,7 @@ function SubmissionCard({ submission, isOpen, flag, isVerified, canVerify, busy,
           </div>
         </div>
         <div className="text-right shrink-0">
-          <div className="text-base font-bold tabular-nums">{endR ?? '—'}</div>
+          <div className={`text-base font-bold tabular-nums ${isDead ? 'line-through text-slate-400' : ''}`}>{endR ?? '—'}</div>
           <div className="text-xs text-slate-500">mm</div>
         </div>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}>
@@ -150,31 +155,40 @@ function SubmissionDetail({ submission, flag, isVerified, canVerify, busy, onTog
   );
 }
 
-// Admin-only manual reading correction. The RAW Kobo value is never touched;
-// the tool stores an override (pipe + submission -> corrected value) and uses
-// it everywhere from now on, so the wrong value stops triggering red flags.
-// Shows old -> new and lets the admin revert to the raw value.
+// Admin-only reading review. Two independent actions on a submission:
+//  1. CORRECT the value — raw Kobo untouched; tool uses the corrected number
+//     everywhere so the wrong value stops triggering red flags. Shows old→new.
+//  2. Mark as a DEAD reading — submitted by mistake (e.g. a duplicate where the
+//     OTHER reading is the correct one). The row stays on Kobo but the tool
+//     ignores it entirely: no flags, not counted, off the map/analytics.
 function ReadingCorrection({ submission }) {
   const existing = submission._correction || null;
-  const rawValue = existing ? existing.oldValue : (submission['group_2/Readings_mm'] ?? submission.reading ?? '');
-  const [open, setOpen] = useState(false);
-  const [newValue, setNewValue] = useState(existing ? existing.newValue : '');
+  const isDead = existing && existing.field === 'dead';
+  const rawValue = existing && existing.field !== 'dead'
+    ? existing.oldValue
+    : (submission['group_2/Readings_mm'] ?? submission.reading ?? '');
+  const [mode, setMode] = useState(null); // null | 'value'
+  const [newValue, setNewValue] = useState(existing && !isDead ? existing.newValue : '');
   const [note, setNote] = useState(existing ? (existing.note || '') : '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
-  async function save() {
-    if (String(newValue).trim() === '') { setErr('Enter the corrected reading.'); return; }
+  async function post(body) {
     setBusy(true); setErr('');
     try {
       const res = await fetch('/api/corrections', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ submissionId: submission._id, oldValue: rawValue, newValue: String(newValue).trim(), note }),
+        body: JSON.stringify({ submissionId: submission._id, ...body }),
       });
-      if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed');
       window.location.reload();
     } catch (e) { setErr(e.message); setBusy(false); }
   }
+  const saveValue = () => {
+    if (String(newValue).trim() === '') { setErr('Enter the corrected reading.'); return; }
+    post({ field: 'reading', oldValue: rawValue, newValue: String(newValue).trim(), note });
+  };
+  const markDead = () => post({ field: 'dead', oldValue: rawValue, note });
   async function revert() {
     setBusy(true); setErr('');
     try {
@@ -184,52 +198,77 @@ function ReadingCorrection({ submission }) {
     } catch (e) { setErr(e.message); setBusy(false); }
   }
 
+  // --- Already marked dead ---
+  if (isDead) {
+    return (
+      <div className="bg-slate-100 border border-slate-300 rounded-lg p-3">
+        <div className="text-sm font-semibold text-slate-700">🗑️ Marked as a dead reading (submitted by mistake)</div>
+        <div className="text-xs text-slate-500 mt-0.5">
+          Raw value {existing.oldValue ?? '—'} mm is still on Kobo but the tool ignores this reading everywhere — no flags, not counted, off the map.
+          {existing.note ? ` Note: ${existing.note}.` : ''} by {existing.by || 'admin'}{existing.at ? ` · ${new Date(existing.at).toLocaleDateString()}` : ''}
+        </div>
+        {err && <div className="text-xs text-red-600 mt-1">{err}</div>}
+        <button onClick={revert} disabled={busy} className="mt-2 text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-700 hover:bg-white disabled:opacity-50">
+          ↺ Restore this reading
+        </button>
+      </div>
+    );
+  }
+
+  // --- Already value-corrected ---
+  if (existing) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <div className="text-sm"><span className="font-semibold text-amber-900">✎ Reading corrected</span></div>
+        <div className="mt-1 flex items-center gap-2 flex-wrap text-sm">
+          <span className="line-through text-slate-500">{existing.oldValue ?? '—'}</span>
+          <span className="text-slate-400">→</span>
+          <span className="font-bold text-emerald-700">{existing.newValue} mm</span>
+        </div>
+        {existing.note && <div className="text-xs text-slate-600 mt-1">Note: {existing.note}</div>}
+        <div className="text-[11px] text-slate-500 mt-0.5">by {existing.by || 'admin'}. Tool uses the corrected value everywhere; raw Kobo data untouched.</div>
+        {err && <div className="text-xs text-red-600 mt-1">{err}</div>}
+        <div className="flex gap-2 mt-2 flex-wrap">
+          <button onClick={() => { setMode('value'); setNewValue(existing.newValue); }} className="text-xs px-3 py-1.5 rounded-lg border border-amber-400 text-amber-800 hover:bg-amber-100">✎ Edit</button>
+          <button onClick={revert} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50">↺ Revert to raw ({existing.oldValue ?? '—'})</button>
+        </div>
+        {mode === 'value' && (
+          <ValueForm rawValue={rawValue} newValue={newValue} setNewValue={setNewValue} note={note} setNote={setNote} err={err} busy={busy} onSave={saveValue} onCancel={() => setMode(null)} />
+        )}
+      </div>
+    );
+  }
+
+  // --- No correction yet: offer both actions ---
   return (
     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-      {existing && (
-        <div className="mb-2 text-sm">
-          <span className="font-semibold text-amber-900">✎ Reading corrected</span>
-          <div className="mt-1 flex items-center gap-2 flex-wrap">
-            <span className="line-through text-slate-500">{existing.oldValue ?? '—'}</span>
-            <span className="text-slate-400">→</span>
-            <span className="font-bold text-emerald-700">{existing.newValue}</span>
-            <span className="text-xs text-slate-500">mm</span>
-          </div>
-          {existing.note && <div className="text-xs text-slate-600 mt-1">Note: {existing.note}</div>}
-          <div className="text-[11px] text-slate-500 mt-0.5">by {existing.by || 'admin'}{existing.at ? ` · ${new Date(existing.at).toLocaleDateString()}` : ''}. The tool uses the corrected value everywhere; raw Kobo data is untouched.</div>
-        </div>
-      )}
-      {!open ? (
+      {mode !== 'value' ? (
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={() => { setOpen(true); setNewValue(existing ? existing.newValue : ''); }}
-            className="text-xs px-3 py-1.5 rounded-lg border border-amber-400 text-amber-800 hover:bg-amber-100">
-            {existing ? '✎ Edit correction' : '✎ Correct this reading'}
-          </button>
-          {existing && (
-            <button onClick={revert} disabled={busy}
-              className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50">
-              ↺ Revert to raw ({existing.oldValue ?? '—'})
-            </button>
-          )}
+          <span className="text-xs text-slate-600 mr-1">Reading looks wrong?</span>
+          <button onClick={() => setMode('value')} className="text-xs px-3 py-1.5 rounded-lg border border-amber-400 text-amber-800 hover:bg-amber-100">✎ Correct the value</button>
+          <button onClick={markDead} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-700 hover:bg-slate-100 disabled:opacity-50">🗑️ Mark as dead (mistake / duplicate)</button>
         </div>
       ) : (
-        <div className="space-y-2">
-          <div className="text-xs text-slate-600">Raw Kobo reading: <b>{rawValue || '—'}</b> mm — enter the corrected value:</div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <input type="number" value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="e.g. 2000"
-              className="w-28 px-2 py-1.5 rounded border border-slate-300 text-sm" />
-            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Reason (optional, e.g. missing zero)"
-              className="flex-1 min-w-[140px] px-2 py-1.5 rounded border border-slate-300 text-sm" />
-          </div>
-          {err && <div className="text-xs text-red-600">{err}</div>}
-          <div className="flex gap-2">
-            <button onClick={save} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 disabled:opacity-50">
-              {busy ? 'Saving…' : 'Save correction'}
-            </button>
-            <button onClick={() => { setOpen(false); setErr(''); }} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600">Cancel</button>
-          </div>
-        </div>
+        <ValueForm rawValue={rawValue} newValue={newValue} setNewValue={setNewValue} note={note} setNote={setNote} err={err} busy={busy} onSave={saveValue} onCancel={() => setMode(null)} />
       )}
+      {err && mode !== 'value' && <div className="text-xs text-red-600 mt-1">{err}</div>}
+    </div>
+  );
+}
+
+function ValueForm({ rawValue, newValue, setNewValue, note, setNote, err, busy, onSave, onCancel }) {
+  return (
+    <div className="space-y-2 mt-2">
+      <div className="text-xs text-slate-600">Raw Kobo reading: <b>{rawValue || '—'}</b> mm — enter the corrected value:</div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <input type="number" value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="e.g. 2000" className="w-28 px-2 py-1.5 rounded border border-slate-300 text-sm" />
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Reason (optional)" className="flex-1 min-w-[140px] px-2 py-1.5 rounded border border-slate-300 text-sm" />
+      </div>
+      {err && <div className="text-xs text-red-600">{err}</div>}
+      <div className="flex gap-2">
+        <button onClick={onSave} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 disabled:opacity-50">{busy ? 'Saving…' : 'Save correction'}</button>
+        <button onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600">Cancel</button>
+      </div>
     </div>
   );
 }

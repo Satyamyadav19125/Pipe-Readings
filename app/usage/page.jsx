@@ -32,6 +32,7 @@ export default async function UsagePage({ searchParams }) {
   const isAdmin = currentUser?.role === 'admin';
 
   const scoped = await filterSubmissionsForUser(submissions);
+  const live = (arr => arr.filter((x) => !x._dead));
 
   // Surveyors don't see flag info. They just see their consumption history.
   const flags = {};

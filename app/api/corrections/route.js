@@ -18,13 +18,14 @@ export async function POST(request) {
   let body;
   try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   const { submissionId, newValue, oldValue, note, field } = body;
-  if (!submissionId || newValue === undefined || newValue === null || String(newValue).trim() === '') {
+  const isDead = field === 'dead';
+  if (!submissionId || (!isDead && (newValue === undefined || newValue === null || String(newValue).trim() === ''))) {
     return NextResponse.json({ error: 'submissionId and newValue are required' }, { status: 400 });
   }
   const doc = await saveCorrection(submissionId, {
     field: field || 'reading',
     oldValue: oldValue ?? null,
-    newValue: String(newValue).trim(),
+    newValue: isDead ? null : String(newValue).trim(),
     by: user?.name || user?.adminId || 'admin',
     note: note || '',
   });

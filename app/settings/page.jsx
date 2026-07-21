@@ -20,7 +20,7 @@ const FLAG_LABELS = {
   growth_anomaly: 'Water level rose far faster than usual for this pipe',
   reverse: 'End reading lower than start reading (within one submission)',
   // Opt-in extras (off by default)
-  duplicate_same_day: 'Same pipe read twice in one day',
+  duplicate_same_day: 'Duplicate — same pipe read twice in one day',
   gps_outlier: "GPS far from this pipe's usual spot",
   identical_gps: 'Same GPS used by different pipes',
   digit_count: 'Digit-count jump in the reading (likely typo)',
@@ -304,12 +304,12 @@ export default function SettingsPage() {
         </div>
         <div className="border border-slate-200 rounded-lg p-3 space-y-2">
           <div className="text-xs font-semibold text-slate-700">📐 "Measure the pipe from the outside, from ground level to top of the pipe — millimeter mm"</div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 items-end">
             <Field label="Standard value (mm)">
               <input type="number" min="0" value={settings.pipe?.outsideStandardMm ?? ''} placeholder="150"
                 onChange={(e) => updatePipe('outsideStandardMm', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
             </Field>
-            <Field label="Allowed tolerance ± (mm)">
+            <Field label="Tolerance ± (mm)">
               <input type="number" min="0" value={settings.pipe?.outsideToleranceMm ?? ''} placeholder="0"
                 onChange={(e) => updatePipe('outsideToleranceMm', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
             </Field>
@@ -666,15 +666,13 @@ function RegistryPanel() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/registry').then((r) => r.json()).catch(() => ({ farms: [], pipes: [] })),
-      fetch('/api/villages').then((r) => r.json()).catch(() => ({ pipes: [] })),
-    ]).then(([reg, vil]) => {
-      setOffFarms(new Set((reg.farms || []).map(String)));
-      setOffPipes(new Set((reg.pipes || []).map(String)));
-      setMaster(vil);
-      setLoaded(true);
-    });
+    fetch('/api/registry').then((r) => r.json()).catch(() => ({ farms: [], pipes: [], master: null }))
+      .then((d) => {
+        setOffFarms(new Set((d.farms || []).map(String)));
+        setOffPipes(new Set((d.pipes || []).map(String)));
+        setMaster(d.master || null);
+        setLoaded(true);
+      });
   }, []);
 
   // Group the master pipe list by farm for a compact on/off tree.
@@ -709,7 +707,7 @@ function RegistryPanel() {
   }
 
   if (!loaded) return <div className="text-sm text-slate-500">Loading farms & pipes…</div>;
-  if (!master?.pipes?.length) return <div className="text-sm text-slate-500">No pipe list available from the Kobo form yet.</div>;
+  if (!master?.pipes?.length) return <div className="text-sm text-slate-500">No pipe list available from the Kobo form yet. This reads the form\u2019s village\u2192farm\u2192pipe choice lists; if your form uses a CSV media file for pipes instead of choice lists, this list can\u2019t be built. Tell me and I\u2019ll wire it to read submissions instead.</div>;
 
   return (
     <div className="space-y-3">

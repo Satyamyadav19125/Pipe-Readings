@@ -1,14 +1,20 @@
 import { NextResponse } from 'next/server';
 import { isAdmin } from '@/lib/auth';
 import { getDisabledRegistry, saveDisabledRegistry } from '@/lib/db';
+import { fetchFormMaster } from '@/lib/kobo';
 import { revalidateTag } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   if (!(await isAdmin())) return NextResponse.json({ error: 'Admin only' }, { status: 401 });
-  const reg = await getDisabledRegistry();
-  return NextResponse.json(reg);
+  const [reg, master] = await Promise.all([getDisabledRegistry(), fetchFormMaster()]);
+  // Include the full farm/pipe list from the Kobo form so the Settings panel
+  // can show every unit with an on/off toggle — including never-read ones.
+  return NextResponse.json({
+    farms: reg.farms || [], pipes: reg.pipes || [],
+    master: { ok: master.ok, villages: master.villages, pipes: master.pipes, error: master.error || null },
+  });
 }
 
 // POST { farms: [...], pipes: [...] } -> replace the disabled lists

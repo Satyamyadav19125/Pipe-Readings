@@ -43,7 +43,9 @@ export default async function MapPage({ searchParams }) {
   const scoped0 = await filterSubmissionsForUser(submissions);
   // Surveyors see all their pins as clean — no red flag indicators on the map.
   const flags = isAdmin ? await detectFlagsScoped(scoped0, settings) : {};
-  const scoped = applyUrlFilters(scoped0, sp);
+  // Drop dead (mistake) readings from map + analytics; they remain in the
+  // Submissions list for admins to review/revert.
+  const scoped = applyUrlFilters(scoped0, sp).filter((s) => !s._dead);
 
   // Irrigation status is per-PIPE (its latest reading), not per-submission.
   const irrThreshold = irrigationThreshold(settings?.pipe);

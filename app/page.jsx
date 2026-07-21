@@ -49,6 +49,8 @@ export default async function HomePage() {
   );
 
   submissions = await filterSubmissionsForUser(submissions);
+  // Dead (mistake) readings are excluded from all overview stats.
+  const liveSubmissions = submissions.filter((s) => !s._dead);
   assignments = await filterAssignmentsForUser(assignments);
 
   // Quality / red-flag stats are admin-only. Surveyors don't see clean vs
@@ -69,7 +71,7 @@ export default async function HomePage() {
   const villageCounts = {};
   const surveyorCounts = {};
   const farmCounts = {}; // farm ID -> number of submissions
-  for (const s of submissions) {
+  for (const s of liveSubmissions) {
     const v = getField(s, 'village') || 'Unknown';
     const sv = getField(s, 'surveyor') || 'Unknown';
     const fm = getField(s, 'farm');
@@ -96,7 +98,7 @@ export default async function HomePage() {
   const meters = deriveMeters(assignments, submissions);
   // AWD irrigation: how many pipes' LATEST reading says "irrigate now"
   const irrThreshold = irrigationThreshold(settings?.pipe);
-  const { counts: irrCounts } = latestPerPipe(submissions, getField, irrThreshold);
+  const { counts: irrCounts } = latestPerPipe(liveSubmissions, getField, irrThreshold);
   const target = Math.max(1, Number(settings?.reading?.target) || 2);
   const periodDays = Math.max(1, Number(settings?.reading?.periodDays) || 7);
   const periodLabel = String(settings?.reading?.periodLabel || 'week');
