@@ -79,11 +79,12 @@ export default async function HomePage() {
     surveyorCounts[sv] = (surveyorCounts[sv] || 0) + 1;
     if (fm) farmCounts[fm] = (farmCounts[fm] || 0) + 1;
   }
-  // Total distinct farms = every farm from the form definition (so farms not
-  // yet read still count), falling back to farms seen in submissions.
+  // "Total farms" = how many DISTINCT farm IDs have at least one reading.
+  // A farm with 4 readings counts once. Farms in the Kobo form that have never
+  // been read are not counted here (they appear in the list below as 0).
+  const totalFarms = Object.keys(farmCounts).length;
   const allFarms = new Set(Object.keys(farmCounts));
   if (master.ok) for (const pm of master.pipes) if (pm.farm) allFarms.add(pm.farm);
-  const totalFarms = allFarms.size;
   const farmRows = [...allFarms]
     .map((farm) => ({ farm, count: farmCounts[farm] || 0 }))
     .sort((a, b) => b.count - a.count);
@@ -161,7 +162,7 @@ export default async function HomePage() {
           <Kpi label="Clean readings" value={cleanTotal.toLocaleString()} color="bg-field-50 text-field-900" icon="✓" />
           <Kpi label="🚩 Flagged" value={flaggedTotal.toLocaleString()} color={flaggedTotal > 0 ? 'bg-red-50 text-red-900' : 'bg-slate-50 text-slate-700'} icon="" />
           <Kpi label="Quality rate" value={submissions.length > 0 ? `${Math.round((cleanTotal / submissions.length) * 100)}%` : '—'} color="bg-emerald-50 text-emerald-900" icon="📊" />
-          {isAdmin && <Kpi label="🌾 Total farms" value={totalFarms.toLocaleString()} color="bg-lime-50 text-lime-900" icon="" />}
+          {isAdmin && <Kpi label="🌾 Farms with readings" value={totalFarms.toLocaleString()} color="bg-lime-50 text-lime-900" icon="" />}
           <Kpi label="Villages" value={uniqueVillages} color="bg-amber-50 text-amber-900" icon="🏘️" />
           <Kpi label="Active surveyors" value={uniqueSurveyors} color="bg-violet-50 text-violet-900" icon="👤" />
           <Kpi label={`This ${periodLabel}`} value={`${done}/${pipesTotal} done`} color="bg-sky-50 text-sky-900" icon="📅" />
@@ -203,7 +204,7 @@ export default async function HomePage() {
 
       {/* Farms — how many forms each farm ID has, with on/off in Settings */}
       {isAdmin && (
-        <Card title="🌾 Forms per farm" subtitle={`${totalFarms} farms · turn farms on/off in Settings → Farms & pipes`}>
+        <Card title="🌾 Forms per farm" subtitle={`${totalFarms} farms with at least one reading · ${farmRows.length} farms in the form · turn farms on/off in Settings → Farms & pipes`}>
           <FarmBreakdown rows={farmRows} />
         </Card>
       )}

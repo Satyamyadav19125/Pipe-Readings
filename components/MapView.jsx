@@ -7,9 +7,23 @@ const LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
 const LEAFLET_HEAT_JS = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js';
 
 const TILE_LAYERS = {
-  street: { name: '🗺️ Street', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap' },
-  satellite: { name: '🛰️ Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Tiles © Esri' },
-  topo: { name: '⛰️ Topo', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attribution: '© OpenTopoMap' },
+  street: { name: '🗺️ Street', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap', maxNativeZoom: 19 },
+  satellite: { name: '🛰️ Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Tiles © Esri', maxNativeZoom: 19 },
+  // OpenTopoMap only has tiles to z17 — past that it serves a grey "max zoom"
+  // placeholder image. maxNativeZoom makes Leaflet upscale z17 tiles instead.
+  topo: { name: '⛰️ Topo', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attribution: '© OpenTopoMap', maxNativeZoom: 17 },
+};
+
+
+// Leaflet treats clicks/wheel inside the map container as map gestures, so a
+// double-tap on our overlay chips was zooming the map out. These handlers keep
+// UI interactions from reaching Leaflet.
+const stopMapGestures = {
+  onClick: (e) => e.stopPropagation(),
+  onDoubleClick: (e) => e.stopPropagation(),
+  onMouseDown: (e) => e.stopPropagation(),
+  onTouchStart: (e) => e.stopPropagation(),
+  onWheel: (e) => e.stopPropagation(),
 };
 
 function escapeHtml(s) {
@@ -105,7 +119,7 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
         const map = L.map(containerRef.current, { zoomControl: true }).setView([30.9, 75.8], 9);
         mapRef.current = map;
         const conf = TILE_LAYERS[layer];
-        tileLayerRef.current = L.tileLayer(conf.url, { maxZoom: 19, attribution: conf.attribution }).addTo(map);
+        tileLayerRef.current = L.tileLayer(conf.url, { maxZoom: 19, maxNativeZoom: conf.maxNativeZoom || 19, attribution: conf.attribution }).addTo(map);
         attachStreetFallback(L, map, tileLayerRef);
         // Container size can settle after fonts/layout — recalc so tiles
         // actually draw instead of leaving a blank map.
@@ -236,7 +250,7 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
     if (!L || !mapRef.current) return;
     if (tileLayerRef.current) mapRef.current.removeLayer(tileLayerRef.current);
     const conf = TILE_LAYERS[layer];
-    tileLayerRef.current = L.tileLayer(conf.url, { maxZoom: 19, attribution: conf.attribution }).addTo(mapRef.current);
+    tileLayerRef.current = L.tileLayer(conf.url, { maxZoom: 19, maxNativeZoom: conf.maxNativeZoom || 19, attribution: conf.attribution }).addTo(mapRef.current);
     attachStreetFallback(L, mapRef.current, tileLayerRef);
   }, [layer]);
 
@@ -268,14 +282,14 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
   return (
     <div className="relative">
       {showFlagFilter && colorMode === 'flags' && (
-        <div className="absolute top-2 left-12 sm:left-14 z-[450] bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs">
+        <div className="absolute top-2 left-12 sm:left-14 z-[450] bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs" {...stopMapGestures}>
           <FilterBtn active={filterMode === 'all'} onClick={() => setFilterMode('all')}>All ({points.length})</FilterBtn>
           <FilterBtn active={filterMode === 'clean'} onClick={() => setFilterMode('clean')} color="text-sky-700">● Clean ({cleanCount})</FilterBtn>
           <FilterBtn active={filterMode === 'flagged'} onClick={() => setFilterMode('flagged')} color="text-red-700">🚩 ({flaggedCount})</FilterBtn>
         </div>
       )}
 
-      <div className={`absolute ${showFlagFilter ? 'top-12' : 'top-2'} left-12 sm:left-14 z-[450] flex gap-1 flex-wrap`}>
+      <div className={`absolute ${showFlagFilter ? 'top-12' : 'top-2'} left-12 sm:left-14 z-[450] flex gap-1 flex-wrap`} {...stopMapGestures}>
         <div className="bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs">
           <FilterBtn active={viewMode === 'pins'} onClick={() => setViewMode('pins')}>📍 Pins</FilterBtn>
           <FilterBtn active={viewMode === 'heat'} onClick={() => setViewMode('heat')} color="text-orange-700">🔥 Heat map</FilterBtn>
@@ -289,7 +303,7 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
       </div>
 
       {irrigation && colorMode === 'irrigation' && (
-        <div className="absolute top-[5.5rem] sm:top-[5.5rem] left-12 sm:left-14 z-[450] bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs flex-wrap">
+        <div className="absolute top-[5.5rem] sm:top-[5.5rem] left-12 sm:left-14 z-[450] bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs flex-wrap" {...stopMapGestures}>
           <FilterBtn active={irrFilter === 'all'} onClick={() => setIrrFilter('all')}>All pipes</FilterBtn>
           <FilterBtn active={irrFilter === 'dry'} onClick={() => setIrrFilter('dry')} color="text-red-700">🔴 Irrigate ({irrCount('dry')})</FilterBtn>
           <FilterBtn active={irrFilter === 'low'} onClick={() => setIrrFilter('low')} color="text-amber-700">🟠 Low ({irrCount('low')})</FilterBtn>
@@ -297,7 +311,7 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
         </div>
       )}
 
-      <div className="absolute top-2 right-2 z-[450] bg-white rounded-lg shadow flex flex-col p-1 gap-0.5">
+      <div className="absolute top-2 right-2 z-[450] bg-white rounded-lg shadow flex flex-col p-1 gap-0.5" {...stopMapGestures}>
         {Object.entries(TILE_LAYERS).map(([k, v]) => (
           <button key={k} onClick={() => setLayer(k)}
             className={`text-[11px] sm:text-xs px-2 py-1 rounded text-left whitespace-nowrap ${layer === k ? 'bg-brand-100 text-brand-900 font-semibold' : 'hover:bg-slate-100'}`}>
@@ -307,7 +321,7 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
       </div>
 
       <button onClick={goToMyLocation} title="Go to my location"
-        className="absolute bottom-6 right-2 z-[450] w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-xl hover:bg-slate-50 active:scale-95 transition">
+        className="absolute bottom-6 right-2 z-[450] w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-xl hover:bg-slate-50 active:scale-95 transition" onDoubleClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
         {locating ? <span className="animate-spin text-base">⏳</span> : '🎯'}
       </button>
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchSubmissions, fetchFormMaster } from '@/lib/kobo';
 import { getCurrentUser } from '@/lib/auth';
-import { getSettings } from '@/lib/db';
+import { getSettings, getDisabledRegistry } from '@/lib/db';
 import { getField, parseReading } from '@/lib/fieldMap';
 import { startOfWeek, endOfWeek, daysRemaining, readingDate } from '@/lib/weekly';
 
@@ -25,8 +25,9 @@ export async function GET(request) {
   let submissions = [];
   let settings;
   let master = { ok: false, villages: [], pipes: [] };
+  let disabledReg = { farms: [], pipes: [] };
   try {
-    [submissions, settings, master] = await Promise.all([fetchSubmissions(), getSettings(), fetchFormMaster()]);
+    [submissions, settings, master, disabledReg] = await Promise.all([fetchSubmissions(), getSettings(), fetchFormMaster(), getDisabledRegistry()]);
   } catch (e) {
     return NextResponse.json({ error: e.message, villages: [] }, { status: 200 });
   }
@@ -68,16 +69,23 @@ export async function GET(request) {
   // never been read appear as "pending" (0 readings) instead of being
   // invisible. Falls back silently to submissions-only when the form has no
   // choice lists (e.g. CSV-driven selects).
+  const lcv = (x) => String(x || '').trim().toLowerCase();
+  const offFarms = new Set((disabledReg.farms || []).map(lcv));
+  const offPipes = new Set((disabledReg.pipes || []).map(lcv));
   if (master.ok) {
     for (const pm of master.pipes) {
       const village = pm.village || 'Unassigned';
       if (allowed && !allowed.has(String(village).trim().toLowerCase())) continue;
+      // Turned-off farms/pipes must never show up as pending readings.
+      if (offFarms.has(lcv(pm.farm)) || offPipes.has(lcv(pm.serial))) continue;
       const key = `${village}|||${pm.serial}`;
       meters[key] = { serial: pm.serial, village, countThisPeriod: 0, lastReading: null, lastDate: null, lastSurveyor: null, lastTs: 0 };
     }
   }
 
   for (const s of submissions) {
+    if (s._dead) continue; // readings marked dead by an admin don't count
+    if (offFarms.has(lcv(getField(s, 'farm'))) || offPipes.has(lcv(getField(s, 'serial')))) continue;
     const serial = getField(s, 'serial');
     if (!serial) continue;
     const village = getField(s, 'village') || 'Unknown';

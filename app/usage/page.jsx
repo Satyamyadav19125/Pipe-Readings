@@ -31,8 +31,10 @@ export default async function UsagePage({ searchParams }) {
   const currentUser = await getCurrentUser();
   const isAdmin = currentUser?.role === 'admin';
 
-  const scoped = await filterSubmissionsForUser(submissions);
-  const live = (arr => arr.filter((x) => !x._dead));
+  let scoped = await filterSubmissionsForUser(submissions);
+  scoped = scoped.filter((x) => !x._dead);
+
+  // Readings marked dead by an admin are mistakes — leave them out.
 
   // Surveyors don't see flag info. They just see their consumption history.
   const flags = {};

@@ -12,6 +12,9 @@ export async function GET(request) {
     let subs = await fetchSubmissions();
     subs = await filterSubmissionsForUser(subs);
     subs = applyUrlFilters(subs, searchParams);
+    // Readings an admin marked dead (submitted by mistake) are excluded from
+    // every export so downstream analysis never sees them.
+    subs = subs.filter((s) => !s._dead);
 
     if (flagFilter !== 'all') {
       const flags = await detectFlagsScoped(subs);
@@ -48,8 +51,8 @@ export async function GET(request) {
         ['PIPE READINGS — SUMMARY'], [],
         ['Overall'], ...overall, [],
         ['Per village'],
-        ['Village', 'Readings', 'Distinct pipes', 'Avg level (mm)', 'Lowest (mm)', 'Highest (mm)', 'Last reading'],
-        ...perVillage.map((v) => [v.village, v.readings, v.pipes, v.avg, v.min, v.max, v.last]),
+        ['Village', 'Readings', 'Distinct farms', 'Distinct pipes', 'Avg level (mm)', 'Lowest (mm)', 'Highest (mm)', 'Last reading'],
+        ...perVillage.map((v) => [v.village, v.readings, v.farms, v.pipes, v.avg, v.min, v.max, v.last]),
       ];
       const sumSheet = XLSX.utils.aoa_to_sheet(summaryRows);
       sumSheet['!cols'] = [{ wch: 24 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 13 }];

@@ -45,8 +45,15 @@ export default async function SubmissionsPage({ searchParams }) {
 
   const filtered0 = applyUrlFilters(scopedAll, sp);
   const redCount = canSeeFlags ? filtered0.filter((s) => isRed(s._id)).length : 0;
-  const flagFilter = canSeeFlags ? (sp.flag || 'all') : 'all';
+  const flagFilter = (canSeeFlags || isAdmin) ? (sp.flag || 'all') : 'all';
+  // Readings an admin has manually corrected or marked dead.
+  const isTouched = (s) => !!s._correction;
+  const touchedCount = isAdmin ? filtered0.filter(isTouched).length : 0;
   const filtered = filtered0.filter((s) => {
+    if (flagFilter === 'fixed') return isAdmin && isTouched(s);
+    // Dead readings are hidden from the normal lists (they're mistakes) and
+    // only shown under the "Fixed & dead" tab.
+    if (s._correction && s._correction.field === 'dead' && flagFilter !== 'fixed') return false;
     if (!canSeeFlags) return true;
     if (flagFilter === 'flagged') return isRed(s._id);
     if (flagFilter === 'clean') return !isRed(s._id);
@@ -78,7 +85,7 @@ export default async function SubmissionsPage({ searchParams }) {
         <FilterBar />
       </Suspense>
 
-      {canSeeFlags && (
+      {(canSeeFlags || isAdmin) && (
         <>
           {!isAdmin && (
             <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -89,6 +96,9 @@ export default async function SubmissionsPage({ searchParams }) {
             <FlagChip name="all" current={flagFilter} sp={sp}>All</FlagChip>
             <FlagChip name="clean" current={flagFilter} sp={sp}>✓ Clean</FlagChip>
             <FlagChip name="flagged" current={flagFilter} sp={sp} danger>🚩 Flagged ({redCount})</FlagChip>
+            {isAdmin && (
+              <FlagChip name="fixed" current={flagFilter} sp={sp}>✎ Fixed &amp; dead ({touchedCount})</FlagChip>
+            )}
           </div>
         </>
       )}

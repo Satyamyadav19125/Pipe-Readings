@@ -180,7 +180,9 @@ function ReadingCorrection({ submission }) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ submissionId: submission._id, ...body }),
       });
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+      let data = {};
+      try { data = await res.json(); } catch {}
+      if (!res.ok || !data.ok) throw new Error(data.error || `Save failed (HTTP ${res.status})`);
       window.location.reload();
     } catch (e) { setErr(e.message); setBusy(false); }
   }
