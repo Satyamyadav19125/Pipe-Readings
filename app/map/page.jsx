@@ -3,7 +3,7 @@ import { fetchSubmissions } from '@/lib/kobo';
 import { filterSubmissionsForUser, applyUrlFilters } from '@/lib/filter';
 import { getField } from '@/lib/fieldMap';
 import { detectFlagsScoped } from '@/lib/flagContext';
-import { getSettings, getVerifiedIds } from '@/lib/db';
+import { getSettings, getVerifiedIds, getDisabledRegistry } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import MapView from '@/components/MapView';
 import { latestPerPipe, irrigationThreshold, irrigationStatus } from '@/lib/irrigation';
@@ -45,7 +45,13 @@ export default async function MapPage({ searchParams }) {
   const flags = isAdmin ? await detectFlagsScoped(scoped0, settings) : {};
   // Drop dead (mistake) readings from map + analytics; they remain in the
   // Submissions list for admins to review/revert.
-  const scoped = applyUrlFilters(scoped0, sp).filter((s) => !s._dead);
+  // Drop dead readings AND anything on a farm/pipe switched off in Settings.
+  const lcm = (x) => String(x || '').trim().toLowerCase();
+  const dReg = await getDisabledRegistry().catch(() => ({ farms: [], pipes: [] }));
+  const offF = new Set((dReg.farms || []).map(lcm));
+  const offP = new Set((dReg.pipes || []).map(lcm));
+  const scoped = applyUrlFilters(scoped0, sp)
+    .filter((s) => !s._dead && !offF.has(lcm(getField(s, 'farm'))) && !offP.has(lcm(getField(s, 'serial'))));
 
   // Irrigation status is per-PIPE (its latest reading), not per-submission.
   const irrThreshold = irrigationThreshold(settings?.pipe);

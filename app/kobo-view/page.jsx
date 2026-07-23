@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { readingDate } from '@/lib/weekly';
 import Link from 'next/link';
 import { fetchSubmissions, findAttachmentUrl } from '@/lib/kobo';
 import { getActiveForm, getSettings } from '@/lib/db';
@@ -66,7 +67,7 @@ export default async function KoboViewPage({ searchParams }) {
   submissions = await filterSubmissionsForUser(submissions);
   submissions = applyUrlFilters(submissions, sp);
 
-  const sorted = [...submissions].sort((a, b) => new Date(b._submission_time).getTime() - new Date(a._submission_time).getTime());
+  const sorted = [...submissions].sort((a, b) => readingDate(b).getTime() - readingDate(a).getTime());
 
   const labelFor = (a) => {
     const q = String(a.question_xpath || a.filename || '').toLowerCase();
@@ -123,6 +124,7 @@ export default async function KoboViewPage({ searchParams }) {
     }
     return {
       photos,
+      photoUrls: photos.map((x) => x.url),
       photosCount: photos.length,
       rows: rows2,
       farm: getField(s, 'farm'),

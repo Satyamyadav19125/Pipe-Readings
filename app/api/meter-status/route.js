@@ -101,12 +101,12 @@ export async function GET(request) {
     if (!Number.isNaN(rt) && rt >= periodStart.getTime() && rt < periodEnd.getTime()) {
       m.countThisPeriod += 1;
     }
-    const upTs = new Date(s._submission_time).getTime();
+    const upTs = readingDate(s).getTime();
     if (!Number.isNaN(upTs) && upTs > m.lastTs) {
       m.lastTs = upTs;
       const r = parseReading(getField(s, 'endReading'));
       m.lastReading = Number.isNaN(r) ? null : r;
-      m.lastDate = s._submission_time;
+      m.lastDate = getField(s, 'date') || s._submission_time;
       m.lastSurveyor = getField(s, 'surveyor') || null;
     }
   }

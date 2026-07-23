@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { readingDate } from '@/lib/weekly';
 import { fetchSubmissions } from '@/lib/kobo';
 import { detectFlagsScoped } from '@/lib/flagContext';
 import { getSettings, getVerifiedIds } from '@/lib/db';
@@ -61,7 +62,7 @@ export default async function SubmissionsPage({ searchParams }) {
   });
 
   const sorted = [...filtered].sort(
-    (a, b) => new Date(b._submission_time).getTime() - new Date(a._submission_time).getTime()
+    (a, b) => readingDate(b).getTime() - readingDate(a).getTime()
   );
   const filteredFlagCount = canSeeFlags ? sorted.filter((s) => isRed(s._id)).length : 0;
 

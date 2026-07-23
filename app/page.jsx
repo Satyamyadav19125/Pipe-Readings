@@ -3,7 +3,7 @@ import { fetchSubmissions, fetchFormMaster } from '@/lib/kobo';
 import { computeWeeklyStatus, deriveMeters, daysRemaining } from '@/lib/weekly';
 import { latestPerPipe, irrigationThreshold } from '@/lib/irrigation';
 import { detectFlagsScoped } from '@/lib/flagContext';
-import { getAssignments, isDbConfigured, getSettings, getMongoHealth, getVerifiedIds } from '@/lib/db';
+import { getAssignments, isDbConfigured, getSettings, getMongoHealth, getVerifiedIds, getDisabledRegistry } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { filterSubmissionsForUser, filterAssignmentsForUser } from '@/lib/filter';
 import { getField } from '@/lib/fieldMap';
@@ -99,24 +99,36 @@ export default async function HomePage() {
   const meters = deriveMeters(assignments, submissions);
   // AWD irrigation: how many pipes' LATEST reading says "irrigate now"
   const irrThreshold = irrigationThreshold(settings?.pipe);
-  const { counts: irrCounts } = latestPerPipe(liveSubmissions, getField, irrThreshold);
+  // Disabled pipes must not appear in the irrigation counts either.
+  const { counts: irrCounts } = latestPerPipe(
+    liveSubmissions.filter((s) => !isOffPipe(getField(s, 'serial'))), getField, irrThreshold);
   const target = Math.max(1, Number(settings?.reading?.target) || 2);
   const periodDays = Math.max(1, Number(settings?.reading?.periodDays) || 7);
   const periodLabel = String(settings?.reading?.periodLabel || 'week');
   const status = computeWeeklyStatus(meters, submissions, new Date(), { target, periodDays });
   const remaining = daysRemaining();
-  const done = status.filter((s) => s.status === 'done').length;
+  // Farms/pipes switched OFF in Settings must not count toward the target.
+  const lcx = (x) => String(x || '').trim().toLowerCase();
+  const disabledReg = await getDisabledRegistry().catch(() => ({ farms: [], pipes: [] }));
+  const offFarmsO = new Set((disabledReg.farms || []).map(lcx));
+  const offPipesO = new Set((disabledReg.pipes || []).map(lcx));
+  const pipeFarm = new Map();
+  if (master.ok) for (const pm of master.pipes) pipeFarm.set(pm.serial, pm.farm);
+  const isOffPipe = (serial) => offPipesO.has(lcx(serial)) || offFarmsO.has(lcx(pipeFarm.get(serial)));
+
+  const done = status.filter((s) => s.status === 'done' && !isOffPipe(s.serial)).length;
   // Coverage denominator: EVERY pipe from the form definition (surveyors see
   // only their villages), so "done" is measured out of all pipes — including
   // pipes that have never been read at all.
-  let pipesTotal = meters.length;
+  let pipesTotal = meters.filter((m) => !isOffPipe(m.serial)).length;
   if (master.ok && master.pipes.length > 0) {
     const allowedV = !isAdmin
       ? new Set((currentUser.villages || []).map((v) => String(v).trim().toLowerCase()))
       : null;
-    const serialSet = new Set(meters.map((m) => m.serial));
+    const serialSet = new Set(meters.filter((m) => !isOffPipe(m.serial)).map((m) => m.serial));
     for (const pm of master.pipes) {
       if (allowedV && (!pm.village || !allowedV.has(String(pm.village).trim().toLowerCase()))) continue;
+      if (offPipesO.has(lcx(pm.serial)) || offFarmsO.has(lcx(pm.farm))) continue;
       serialSet.add(pm.serial);
     }
     pipesTotal = serialSet.size;

@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { readingDate } from '@/lib/weekly';
 import Link from 'next/link';
 import { fetchSubmissions } from '@/lib/kobo';
 import { filterSubmissionsForUser } from '@/lib/filter';
@@ -28,7 +29,7 @@ export default async function MeterPage({ params }) {
   const flags = isAdmin ? await detectFlagsScoped(submissions, settings) : {};
 
   const sorted = [...mine].sort(
-    (a, b) => new Date(b._submission_time).getTime() - new Date(a._submission_time).getTime()
+    (a, b) => readingDate(b).getTime() - readingDate(a).getTime()
   );
 
   const village = sorted[0] ? getField(sorted[0], 'village') : null;

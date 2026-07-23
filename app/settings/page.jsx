@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { APP_LEVEL } from '@/lib/version';
 import DataStorage from '@/components/DataStorage';
 
 const FLAG_LABELS = {
@@ -199,7 +200,7 @@ export default function SettingsPage() {
       <div className="sticky top-[60px] z-40 -mx-3 sm:mx-0 bg-slate-100/95 backdrop-blur px-3 sm:px-0 py-2 border-b border-slate-200">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div>
-            <h1 className="text-xl font-bold">⚙️ Settings</h1>
+            <h1 className="text-xl font-bold">⚙️ Settings <span className="text-xs font-normal text-slate-400 align-middle">Level {APP_LEVEL}</span></h1>
             {lastSavedAt && !dirty && (
               <p className="text-[11px] text-slate-500">Last saved {lastSavedAt.toLocaleTimeString()}</p>
             )}
@@ -684,8 +685,16 @@ function RegistryPanel() {
       farms[farm].pipes.push(p.serial);
     }
   }
+  // Search accepts several IDs separated by commas, e.g.
+  //   "PLT_10194, PLT_5037"  or  "AM_10194A, AV_5037B"
+  // A farm matches if its own ID matches OR any of its pipes match.
+  const terms = q.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+  const matches = (farm, pipes) => {
+    if (terms.length === 0) return true;
+    return terms.some((t) => farm.toLowerCase().includes(t) || pipes.some((p) => p.toLowerCase().includes(t)));
+  };
   const farmList = Object.entries(farms)
-    .filter(([farm]) => !q || farm.toLowerCase().includes(q.toLowerCase()))
+    .filter(([farm, info]) => matches(farm, info.pipes))
     .sort((a, b) => a[0].localeCompare(b[0]));
 
   function toggleSet(setter, set, key) {
@@ -712,7 +721,7 @@ function RegistryPanel() {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search farm ID…"
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search farm or pipe IDs — separate with commas"
           className="input flex-1 min-w-[160px]" />
         <span className="text-xs text-slate-500">{offFarms.size} farms · {offPipes.size} pipes off</span>
       </div>
@@ -750,6 +759,16 @@ function RegistryPanel() {
         })}
       </div>
 
+      {terms.length > 0 && farmList.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap bg-slate-50 border border-slate-200 rounded-lg p-2">
+          <span className="text-xs text-slate-600">{farmList.length} farm(s) matched —</span>
+          <button onClick={() => { const n = new Set(offFarms); farmList.forEach(([f]) => n.add(f)); setOffFarms(n); }}
+            className="text-xs px-2.5 py-1 rounded border border-slate-400 text-slate-700 hover:bg-white">Turn all OFF</button>
+          <button onClick={() => { const n = new Set(offFarms); farmList.forEach(([f]) => n.delete(f)); setOffFarms(n); }}
+            className="text-xs px-2.5 py-1 rounded border border-emerald-400 text-emerald-700 hover:bg-white">Turn all ON</button>
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
         <button onClick={save} disabled={busy}
           className="px-3 py-2 text-sm rounded-lg bg-brand-600 text-white font-medium hover:bg-brand-700 disabled:opacity-50">
@@ -757,7 +776,7 @@ function RegistryPanel() {
         </button>
         {msg && <span className="text-xs text-slate-700">{msg}</span>}
       </div>
-      <p className="text-[11px] text-slate-500">Tap a farm's <b>On/Off</b> to disable the whole plot, or tap individual pipe codes to disable just those. Disabled units vanish from surveyors, are excluded from red flags, and don't count toward missed readings.</p>
+      <p className="text-[11px] text-slate-500">Search several at once by separating IDs with commas, then use <b>Turn all OFF/ON</b>. Tap a farm's <b>On/Off</b> to disable the whole plot, or tap individual pipe codes to disable just those. Disabled units vanish from surveyors, are excluded from red flags, and don't count toward missed readings.</p>
     </div>
   );
 }

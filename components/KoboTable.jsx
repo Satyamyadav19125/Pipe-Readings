@@ -16,8 +16,8 @@ const COLUMNS = [
   { key: 'village', label: 'Village', width: 90, mobile: true },
   { key: 'farm', label: 'Farm ID', width: 200, mobile: false },
   { key: 'meter', label: 'Pipe ID', width: 110, mobile: true },
+  { key: 'validation', label: 'Outside (mm)', width: 100, mobile: true },
   { key: 'reading', label: 'Level (mm)', width: 90, mobile: true },
-  { key: 'validation', label: 'Outside (mm)', width: 100, mobile: false },
   { key: 'gps', label: 'GPS', width: 170, mobile: false },
 ];
 const hideCls = (c) => (c.mobile ? '' : 'hidden md:table-cell');
@@ -134,11 +134,16 @@ export default function KoboTable({ rows = [], standards = null }) {
                   <td key={c.key} className={cellClass(c)}>{cellValue(c, r, standards)}</td>
                 ))}
                 <td className="px-2 md:px-3 py-2 whitespace-nowrap">
-                  {r.photo
-                    ? <button onClick={() => setLightbox(r.photo)} className="text-brand-600 text-xs hover:underline">
-                        📷 {r.photosCount > 1 ? `×${r.photosCount} ` : ''}view
-                      </button>
-                    : <span className="text-slate-300 text-xs">–</span>}
+                  {(r.photoUrls?.length ? r.photoUrls : (r.photo ? [r.photo] : [])).length > 0 ? (
+                    <div className="flex items-center gap-1">
+                      {(r.photoUrls?.length ? r.photoUrls : [r.photo]).slice(0, 2).map((u, i) => (
+                        <button key={i} onClick={() => setLightbox(u)} title="Tap to enlarge">
+                          <img src={u} alt="" loading="lazy"
+                            className="w-9 h-9 object-cover rounded border border-slate-200 hover:ring-2 hover:ring-brand-400 cursor-zoom-in" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : <span className="text-slate-300 text-xs">–</span>}
                 </td>
               </tr>
             ))}
