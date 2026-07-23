@@ -97,6 +97,14 @@ export default async function HomePage() {
   const surveyorBars = Object.entries(surveyorCounts).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
 
   const meters = deriveMeters(assignments, submissions);
+  // Farms/pipes switched OFF in Settings must not count toward the target.
+  const lcx = (x) => String(x || '').trim().toLowerCase();
+  const disabledReg = await getDisabledRegistry().catch(() => ({ farms: [], pipes: [] }));
+  const offFarmsO = new Set((disabledReg.farms || []).map(lcx));
+  const offPipesO = new Set((disabledReg.pipes || []).map(lcx));
+  const pipeFarm = new Map();
+  if (master.ok) for (const pm of master.pipes) pipeFarm.set(pm.serial, pm.farm);
+  const isOffPipe = (serial) => offPipesO.has(lcx(serial)) || offFarmsO.has(lcx(pipeFarm.get(serial)));
   // AWD irrigation: how many pipes' LATEST reading says "irrigate now"
   const irrThreshold = irrigationThreshold(settings?.pipe);
   // Disabled pipes must not appear in the irrigation counts either.
@@ -107,14 +115,6 @@ export default async function HomePage() {
   const periodLabel = String(settings?.reading?.periodLabel || 'week');
   const status = computeWeeklyStatus(meters, submissions, new Date(), { target, periodDays });
   const remaining = daysRemaining();
-  // Farms/pipes switched OFF in Settings must not count toward the target.
-  const lcx = (x) => String(x || '').trim().toLowerCase();
-  const disabledReg = await getDisabledRegistry().catch(() => ({ farms: [], pipes: [] }));
-  const offFarmsO = new Set((disabledReg.farms || []).map(lcx));
-  const offPipesO = new Set((disabledReg.pipes || []).map(lcx));
-  const pipeFarm = new Map();
-  if (master.ok) for (const pm of master.pipes) pipeFarm.set(pm.serial, pm.farm);
-  const isOffPipe = (serial) => offPipesO.has(lcx(serial)) || offFarmsO.has(lcx(pipeFarm.get(serial)));
 
   const done = status.filter((s) => s.status === 'done' && !isOffPipe(s.serial)).length;
   // Coverage denominator: EVERY pipe from the form definition (surveyors see
