@@ -79,7 +79,7 @@ export async function GET(request) {
       // Turned-off farms/pipes must never show up as pending readings.
       if (offFarms.has(lcv(pm.farm)) || offPipes.has(lcv(pm.serial))) continue;
       const key = `${village}|||${pm.serial}`;
-      meters[key] = { serial: pm.serial, village, countThisPeriod: 0, lastReading: null, lastDate: null, lastSurveyor: null, lastTs: 0 };
+      meters[key] = { serial: pm.serial, farm: pm.farm || null, village, countThisPeriod: 0, lastReading: null, lastDate: null, lastSurveyor: null, lastTs: 0 };
     }
   }
 
@@ -93,9 +93,10 @@ export async function GET(request) {
 
     const key = `${village}|||${serial}`;
     if (!meters[key]) {
-      meters[key] = { serial, village, countThisPeriod: 0, lastReading: null, lastDate: null, lastSurveyor: null, lastTs: 0 };
+      meters[key] = { serial, farm: getField(s, 'farm') || null, village, countThisPeriod: 0, lastReading: null, lastDate: null, lastSurveyor: null, lastTs: 0 };
     }
     const m = meters[key];
+    if (!m.farm) m.farm = getField(s, 'farm') || null;
 
     const rt = readingDate(s).getTime();
     if (!Number.isNaN(rt) && rt >= periodStart.getTime() && rt < periodEnd.getTime()) {
@@ -115,7 +116,7 @@ export async function GET(request) {
   for (const key in meters) {
     const m = meters[key];
     const status = m.countThisPeriod >= target ? 'done' : m.countThisPeriod > 0 ? 'partial' : 'pending';
-    const row = { serial: m.serial, countThisPeriod: m.countThisPeriod, status, lastReading: m.lastReading, lastDate: m.lastDate, lastSurveyor: m.lastSurveyor };
+    const row = { serial: m.serial, farm: m.farm, countThisPeriod: m.countThisPeriod, status, lastReading: m.lastReading, lastDate: m.lastDate, lastSurveyor: m.lastSurveyor };
     if (!byVillage[m.village]) byVillage[m.village] = [];
     byVillage[m.village].push(row);
   }
@@ -149,5 +150,9 @@ export async function GET(request) {
     daysLeft,
     isCurrentWeek: isCurrent,
     role: user.role,
+    // For the pre-filled "Take reading" links on each pending pipe.
+    formUploadUrl: settings?.project?.formUploadUrl || '',
+    userName: user.role === 'admin' ? '' : (user.name || ''),
+    prefillPaths: settings?.project?.prefillPaths || null,
   });
 }

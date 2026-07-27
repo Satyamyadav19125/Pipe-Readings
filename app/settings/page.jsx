@@ -20,6 +20,8 @@ const FLAG_LABELS = {
   huge_jump: 'Water level jumped by a huge amount (likely extra digit)',
   growth_anomaly: 'Water level rose far faster than usual for this pipe',
   reverse: 'End reading lower than start reading (within one submission)',
+  zero_consumption: 'No change in water level over 7+ days (level stayed flat)',
+  village_outlier: "Reading far from others in the same village",
   // Opt-in extras (off by default)
   duplicate_same_day: 'Duplicate — same pipe read twice in one day',
   gps_outlier: "GPS far from this pipe's usual spot",
@@ -279,6 +281,10 @@ export default function SettingsPage() {
         <Field label="Kobo form upload URL (the 'New reading' button)">
           <input value={settings.project.formUploadUrl || ''} onChange={(e) => updateProject('formUploadUrl', e.target.value)} placeholder="https://ee.kobotoolbox.org/x/..." className="input"/>
         </Field>
+        <div className="bg-sky-50 border border-sky-100 rounded-lg p-2.5 text-xs text-sky-900">
+          <b>📲 Pre-filled reading links:</b> when this URL is set, every pending pipe in the Assignment tab gets a
+          <b> ➕ Take reading</b> button that opens this form with the village, farm, pipe, date and surveyor name already filled — the surveyor only enters the outside height, water level, GPS and photos. Use the <b>web form (Enketo) URL</b> here — in KoboToolbox open the form → <b>Collect data</b> → copy the <b>"Online-Offline (multiple submission)"</b> link (it looks like <span className="font-mono">ee.kobotoolbox.org/x/…</span>).
+        </div>
       </Section>
 
       {/* Reading targets */}

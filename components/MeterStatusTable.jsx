@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import { buildPrefillUrl } from '@/lib/prefill';
 
 const STATUS = {
   done:    { label: '✓ Done',         dot: 'bg-emerald-500', chip: 'bg-emerald-100 text-emerald-800 border-emerald-200', row: 'bg-emerald-50/40' },
@@ -163,9 +164,27 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
                         : 'no readings yet'}
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <span className={`inline-block text-[11px] px-2 py-0.5 rounded-full border font-medium ${st.chip}`}>{st.label}</span>
-                    <div className="text-[10px] text-slate-400 mt-0.5 tabular-nums">{Math.min(m.countThisPeriod, target)}/{target}</div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Pre-filled Kobo link: opens the form with village, farm,
+                        pipe, date (and surveyor name) already set. Only shown
+                        for pipes still needing a reading, when a form URL is
+                        configured in Settings. */}
+                    {data.formUploadUrl && st.label !== 'Done' && (
+                      <a
+                        href={buildPrefillUrl(data.formUploadUrl,
+                          { village: v.village, farm: m.farm, pipe: m.serial, name: data.userName },
+                          { paths: data.prefillPaths || undefined })}
+                        target="_blank" rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-[11px] px-2.5 py-1 rounded-full bg-field-600 text-white font-medium hover:bg-field-700 whitespace-nowrap"
+                        title="Open the Kobo form with this pipe's details pre-filled">
+                        ➕ Take reading
+                      </a>
+                    )}
+                    <div className="text-right">
+                      <span className={`inline-block text-[11px] px-2 py-0.5 rounded-full border font-medium ${st.chip}`}>{st.label}</span>
+                      <div className="text-[10px] text-slate-400 mt-0.5 tabular-nums">{Math.min(m.countThisPeriod, target)}/{target}</div>
+                    </div>
                   </div>
                 </li>
               );
