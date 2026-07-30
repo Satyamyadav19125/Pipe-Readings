@@ -24,6 +24,7 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('todo'); // todo | all | done
   const [q, setQ] = useState('');
+  const [openCheat, setOpenCheat] = useState({});
   const [openVillages, setOpenVillages] = useState({}); // village -> bool (collapsed by default)
 
   useEffect(() => {
@@ -154,38 +155,59 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
             {v.shownMeters.map((m) => {
               const st = STATUS[m.status];
               return (
-                <li key={m.serial} className={`px-4 py-2.5 flex items-center gap-3 ${st.row}`}>
-                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${st.dot}`} />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-mono text-sm truncate">{m.serial}</div>
-                    <div className="text-[11px] text-slate-500 truncate">
-                      {m.lastDate
-                        ? <>last: {m.lastReading ?? '—'} · {new Date(m.lastDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}{m.lastSurveyor ? ` · ${m.lastSurveyor}` : ''}</>
-                        : 'no readings yet'}
+                <li key={m.serial} className={`px-4 py-2.5 ${st.row}`}>
+                  <div className="flex items-center gap-3">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${st.dot}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono text-sm truncate">{m.serial}</div>
+                      {m.farm && <div className="text-[10px] text-slate-400 font-mono truncate">🌾 {m.farm}</div>}
+                      <div className="text-[11px] text-slate-500 truncate">
+                        {m.lastDate
+                          ? <>last: {m.lastReading ?? '—'} · {new Date(m.lastDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}{m.lastSurveyor ? ` · ${m.lastSurveyor}` : ''}</>
+                          : 'no readings yet'}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {m.status !== 'done' && (
+                        <button onClick={() => setOpenCheat((o) => ({ ...o, [m.serial]: !o[m.serial] }))}
+                          className="text-[11px] px-2 py-1 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-100"
+                          title="Show farm ID and GPS to type into the KoboCollect app">
+                          📋 details
+                        </button>
+                      )}
+                      {/* Pre-filled Kobo web-form link (for those not using the app) */}
+                      {data.formUploadUrl && m.status !== 'done' && (
+                        <a
+                          href={buildPrefillUrl(data.formUploadUrl,
+                            { village: v.village, farm: m.farm, pipe: m.serial, name: data.userName },
+                            { paths: data.prefillPaths || undefined })}
+                          target="_blank" rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-[11px] px-2.5 py-1 rounded-full bg-field-600 text-white font-medium hover:bg-field-700 whitespace-nowrap"
+                          title="Open the Kobo web form with this pipe's details pre-filled">
+                          ➕ Take reading
+                        </a>
+                      )}
+                      <div className="text-right">
+                        <span className={`inline-block text-[11px] px-2 py-0.5 rounded-full border font-medium ${st.chip}`}>{st.label}</span>
+                        <div className="text-[10px] text-slate-400 mt-0.5 tabular-nums">{Math.min(m.countThisPeriod, target)}/{target}</div>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {/* Pre-filled Kobo link: opens the form with village, farm,
-                        pipe, date (and surveyor name) already set. Only shown
-                        for pipes still needing a reading, when a form URL is
-                        configured in Settings. */}
-                    {data.formUploadUrl && st.label !== 'Done' && (
-                      <a
-                        href={buildPrefillUrl(data.formUploadUrl,
-                          { village: v.village, farm: m.farm, pipe: m.serial, name: data.userName },
-                          { paths: data.prefillPaths || undefined })}
-                        target="_blank" rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-[11px] px-2.5 py-1 rounded-full bg-field-600 text-white font-medium hover:bg-field-700 whitespace-nowrap"
-                        title="Open the Kobo form with this pipe's details pre-filled">
-                        ➕ Take reading
-                      </a>
-                    )}
-                    <div className="text-right">
-                      <span className={`inline-block text-[11px] px-2 py-0.5 rounded-full border font-medium ${st.chip}`}>{st.label}</span>
-                      <div className="text-[10px] text-slate-400 mt-0.5 tabular-nums">{Math.min(m.countThisPeriod, target)}/{target}</div>
+
+                  {/* KoboCollect cheat-sheet: the details to type into the app,
+                      each with a copy button. For surveyors who use the native
+                      KoboCollect app (which can't be pre-filled by a link). */}
+                  {openCheat[m.serial] && (
+                    <div className="mt-2 ml-5 bg-white border border-slate-200 rounded-lg p-2.5 text-xs space-y-1.5">
+                      <div className="text-[11px] text-slate-500">Type these into the KoboCollect app for this pipe:</div>
+                      <CopyRow label="Village" value={v.village} />
+                      <CopyRow label="Farm ID" value={m.farm} />
+                      <CopyRow label="Pipe ID" value={m.serial} />
+                      {m.refLoc && <CopyRow label="Reference GPS" value={m.refLoc} />}
+                      <div className="text-[10px] text-slate-400 pt-0.5">Then just fill the outside height, water level, GPS and photos.</div>
                     </div>
-                  </div>
+                  )}
                 </li>
               );
             })}
@@ -203,5 +225,25 @@ function FilterBtn({ active, onClick, children }) {
       className={`px-2.5 py-1.5 rounded-md whitespace-nowrap transition ${active ? 'bg-brand-600 text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}>
       {children}
     </button>
+  );
+}
+
+
+// One label:value row with a copy button, for the KoboCollect cheat-sheet.
+function CopyRow({ label, value }) {
+  const [copied, setCopied] = useState(false);
+  if (!value) return null;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(String(value)); setCopied(true); setTimeout(() => setCopied(false), 1200); }
+    catch { /* clipboard may be blocked; value is still visible to type */ }
+  };
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-slate-500 w-24 shrink-0">{label}</span>
+      <span className="font-mono flex-1 truncate">{value}</span>
+      <button onClick={copy} className="text-[10px] px-2 py-0.5 rounded border border-slate-300 text-slate-600 hover:bg-slate-100 shrink-0">
+        {copied ? '✓ copied' : 'copy'}
+      </button>
+    </div>
   );
 }

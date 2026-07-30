@@ -25,13 +25,10 @@ export async function POST() {
   // Re-render the data-driven pages so the next render uses fresh data.
   // The client also calls router.refresh() after this returns, which
   // actually swaps the new HTML in.
-  revalidatePath('/');
-  revalidatePath('/submissions');
-  revalidatePath('/usage');
-  revalidatePath('/map');
-  revalidatePath('/kobo-view');
-  revalidatePath('/missed');
-  revalidatePath('/team');
+  // Revalidate with type 'layout' so the WHOLE route subtree re-renders
+  // (the default only refreshes the page file, which left stale data in
+  // nested server components — that's why refresh felt partial).
+  revalidatePath('/', 'layout');
 
   return NextResponse.json({ ok: true, ts: new Date().toISOString() });
 }

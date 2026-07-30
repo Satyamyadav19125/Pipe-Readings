@@ -21,6 +21,12 @@ export default function UsageRow({ entry, previous, current, flag, hideFlags = f
           <div className="font-medium tabular-nums">{c.fromReading} → {c.toReading}</div>
           <div className="text-xs text-slate-500 truncate">
             {new Date(c.fromDate).toLocaleDateString()} → {new Date(c.toDate).toLocaleDateString()}
+            {(() => {
+              const days = Math.round((new Date(c.toDate) - new Date(c.fromDate)) / 86400000);
+              return Number.isFinite(days) && days > 0
+                ? <span className="ml-1 text-slate-400">· next reading after {days} day{days === 1 ? '' : 's'}</span>
+                : null;
+            })()}
             {c.toSurveyor && <> · {c.toSurveyor}</>}
           </div>
         </div>

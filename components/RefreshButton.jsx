@@ -24,6 +24,9 @@ export default function RefreshButton() {
       // Refresh server components — the busted Kobo cache means the next
       // fetch inside fetchSubmissions() will go to Kobo fresh.
       router.refresh();
+      // Give the server a moment to re-render with fresh Kobo data, then do a
+      // second refresh so the swapped-in HTML is definitely the new data.
+      setTimeout(() => router.refresh(), 800);
       // Brief delay so the user actually sees the spinner.
       setTimeout(() => {
         setState('done');

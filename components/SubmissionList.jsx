@@ -86,6 +86,7 @@ function SubmissionCard({ submission, isOpen, flag, isVerified, canVerify, busy,
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-600">
             <span className="font-mono">{serial || '—'}</span>
+            {getField(s, 'farm') && <span className="font-mono text-[11px] text-slate-400">🌾 {getField(s, 'farm')}</span>}
             <span>{time.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span>
           </div>
         </div>
@@ -144,13 +145,179 @@ function SubmissionDetail({ submission, flag, isVerified, canVerify, busy, onTog
       {canVerify && <ReadingCorrection submission={submission} />}
 
       {previous ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <SubmissionPanel label="Previous reading" submission={previous} highlight="emerald" />
-          <SubmissionPanel label="Current reading" submission={submission} highlight={isVerified ? 'emerald' : 'red'} />
-        </div>
+        <DuplicateCompare current={submission} other={previous} canVerify={canVerify} />
       ) : (
         <SubmissionPanel label="Form data" submission={submission} />
       )}
+
+      {canVerify && <FullFormEditor submission={submission} />}
+    </div>
+  );
+}
+
+// Side-by-side comparison of two submissions (e.g. a duplicate pair), with the
+// differing fields highlighted, so the admin can see WHY one is wrong. Also
+// lets the admin pick which of the two is the mistake and mark it dead.
+const COMPARE_FIELDS = [
+  ['date', 'Date'], ['startTime', 'Start'], ['endTime', 'End'], ['surveyor', 'Surveyor'],
+  ['village', 'Village'], ['farm', 'Farm ID'], ['serial', 'Pipe ID'],
+  ['validation', 'Outside (mm)'], ['reading', 'Water level (mm)'], ['location', 'GPS'],
+];
+function DuplicateCompare({ current, other, canVerify }) {
+  const [busy, setBusy] = useState('');
+  const val = (sub, key) => {
+    if (key === 'reading') return getField(sub, 'endReading') ?? getField(sub, 'reading') ?? '';
+    return getField(sub, key) ?? '';
+  };
+  async function markDead(sub) {
+    setBusy(sub._id);
+    try {
+      const res = await fetch('/api/corrections', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissionId: sub._id, field: 'dead', oldValue: val(sub, 'reading') }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+      window.location.reload();
+    } catch (e) { alert(e.message); setBusy(''); }
+  }
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">⚖️ Comparison — differences highlighted</div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border border-slate-200 rounded-lg">
+          <thead>
+            <tr className="bg-slate-50">
+              <th className="text-left px-2 py-1.5 font-medium text-slate-500">Field</th>
+              <th className="text-left px-2 py-1.5 font-medium">This one <span className="font-mono text-[10px] text-slate-400">#{String(current._id).slice(-5)}</span></th>
+              <th className="text-left px-2 py-1.5 font-medium">The other <span className="font-mono text-[10px] text-slate-400">#{String(other._id).slice(-5)}</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {COMPARE_FIELDS.map(([key, label]) => {
+              const a = String(val(current, key)); const b = String(val(other, key));
+              const diff = a !== b;
+              return (
+                <tr key={key} className={`border-t border-slate-100 ${diff ? 'bg-amber-50' : ''}`}>
+                  <td className="px-2 py-1 text-slate-500">{label}</td>
+                  <td className={`px-2 py-1 ${diff ? 'font-semibold text-amber-800' : ''}`}>{a || '—'}</td>
+                  <td className={`px-2 py-1 ${diff ? 'font-semibold text-amber-800' : ''}`}>{b || '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {canVerify && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-xs text-slate-500">Which is the mistake?</span>
+          <button onClick={() => markDead(current)} disabled={!!busy}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-700 hover:bg-slate-100 disabled:opacity-50">
+            🗑️ This one is dead
+          </button>
+          <button onClick={() => markDead(other)} disabled={!!busy}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-700 hover:bg-slate-100 disabled:opacity-50">
+            🗑️ The other is dead
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Full-form editor: admin edits ANY field of a submission. Saved as an override
+// (raw Kobo untouched); the edited values flow through the whole tool. This is
+// how you fix a submission where something other than the reading is wrong.
+const EDITABLE = [
+  ['group_1/Date', 'Date', 'date'], ['group_1/name', 'Surveyor name', 'name'],
+  ['group_1/village', 'Village', 'village'], ['group_2/farm', 'Farm ID', 'farm'],
+  ['group_2/pipes', 'Pipe ID', 'serial'], ['group_2/Outside_validation', 'Outside height (mm)', 'validation'],
+  ['group_2/Readings_mm', 'Water level (mm)', 'reading'], ['group_2/Location', 'GPS (lat lng)', 'location'],
+];
+function FullFormEditor({ submission }) {
+  const existing = submission._correction && submission._correction.field === 'fields'
+    ? (submission._correction.fields || {}) : {};
+  const [open, setOpen] = useState(false);
+  const [vals, setVals] = useState({});
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  function currentVal(path, logical) {
+    if (path in existing) return existing[path];
+    if (path in submission) return submission[path];
+    return getField(submission, logical) ?? '';
+  }
+  function begin() {
+    const seed = {};
+    for (const [path, , logical] of EDITABLE) seed[path] = String(currentVal(path, logical) ?? '');
+    setVals(seed); setOpen(true); setErr('');
+  }
+  async function save() {
+    // Only send fields that actually changed from the raw value.
+    const changed = {};
+    for (const [path, , logical] of EDITABLE) {
+      const raw = String(submission[path] ?? getField(submission, logical) ?? '');
+      if (String(vals[path] ?? '') !== raw) changed[path] = vals[path];
+    }
+    if (Object.keys(changed).length === 0) { setErr('Nothing changed.'); return; }
+    setBusy(true); setErr('');
+    try {
+      const res = await fetch('/api/corrections', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissionId: submission._id, field: 'fields', fields: changed, note }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.ok) throw new Error(d.error || `Save failed (HTTP ${res.status})`);
+      window.location.reload();
+    } catch (e) { setErr(e.message); setBusy(false); }
+  }
+  async function revert() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/corrections?id=${encodeURIComponent(submission._id)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+      window.location.reload();
+    } catch (e) { setErr(e.message); setBusy(false); }
+  }
+
+  if (!open) {
+    return (
+      <div className="flex items-center gap-2 flex-wrap">
+        <button onClick={begin} className="text-xs px-3 py-1.5 rounded-lg border border-sky-400 text-sky-700 hover:bg-sky-50">
+          ✏️ Edit full form
+        </button>
+        {Object.keys(existing).length > 0 && (
+          <>
+            <span className="text-xs text-emerald-700">✎ {Object.keys(existing).length} field(s) edited</span>
+            <button onClick={revert} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50">↺ Revert all</button>
+          </>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="bg-sky-50 border border-sky-200 rounded-lg p-3 space-y-2">
+      <div className="text-sm font-semibold text-sky-900">✏️ Edit full form <span className="font-normal text-xs text-slate-500">— raw Kobo data stays untouched; the tool uses your edits everywhere</span></div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {EDITABLE.map(([path, label, logical]) => {
+          const raw = String(submission[path] ?? getField(submission, logical) ?? '');
+          const changed = String(vals[path] ?? '') !== raw;
+          return (
+            <label key={path} className="block">
+              <span className="text-[11px] text-slate-500">{label}{changed && <span className="text-amber-600"> ●</span>}</span>
+              <input value={vals[path] ?? ''} onChange={(e) => setVals({ ...vals, [path]: e.target.value })}
+                className={`w-full px-2 py-1.5 rounded border text-sm ${changed ? 'border-amber-400 bg-amber-50' : 'border-slate-300'}`} />
+            </label>
+          );
+        })}
+      </div>
+      <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Reason for the edit (optional)"
+        className="w-full px-2 py-1.5 rounded border border-slate-300 text-sm" />
+      {err && <div className="text-xs text-red-600">{err}</div>}
+      <div className="flex gap-2">
+        <button onClick={save} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg bg-sky-600 text-white font-medium hover:bg-sky-700 disabled:opacity-50">{busy ? 'Saving…' : 'Save edits'}</button>
+        <button onClick={() => setOpen(false)} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600">Cancel</button>
+      </div>
     </div>
   );
 }

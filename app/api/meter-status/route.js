@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchSubmissions, fetchFormMaster } from '@/lib/kobo';
 import { getCurrentUser } from '@/lib/auth';
-import { getSettings, getDisabledRegistry } from '@/lib/db';
+import { getSettings, getDisabledRegistry, getPipeLocations } from '@/lib/db';
 import { getField, parseReading } from '@/lib/fieldMap';
 import { startOfWeek, endOfWeek, daysRemaining, readingDate } from '@/lib/weekly';
 
@@ -26,8 +26,9 @@ export async function GET(request) {
   let settings;
   let master = { ok: false, villages: [], pipes: [] };
   let disabledReg = { farms: [], pipes: [] };
+  let pipeLocs = { locations: {} };
   try {
-    [submissions, settings, master, disabledReg] = await Promise.all([fetchSubmissions(), getSettings(), fetchFormMaster(), getDisabledRegistry()]);
+    [submissions, settings, master, disabledReg, pipeLocs] = await Promise.all([fetchSubmissions(), getSettings(), fetchFormMaster(), getDisabledRegistry(), getPipeLocations().catch(() => ({ locations: {} }))]);
   } catch (e) {
     return NextResponse.json({ error: e.message, villages: [] }, { status: 200 });
   }
@@ -116,7 +117,8 @@ export async function GET(request) {
   for (const key in meters) {
     const m = meters[key];
     const status = m.countThisPeriod >= target ? 'done' : m.countThisPeriod > 0 ? 'partial' : 'pending';
-    const row = { serial: m.serial, farm: m.farm, countThisPeriod: m.countThisPeriod, status, lastReading: m.lastReading, lastDate: m.lastDate, lastSurveyor: m.lastSurveyor };
+    const rl = (pipeLocs.locations || {})[m.serial] || (pipeLocs.locations || {})[String(m.serial).toUpperCase()] || null;
+    const row = { serial: m.serial, farm: m.farm, countThisPeriod: m.countThisPeriod, status, lastReading: m.lastReading, lastDate: m.lastDate, lastSurveyor: m.lastSurveyor, refLoc: rl ? `${rl.lat}, ${rl.lng}` : null };
     if (!byVillage[m.village]) byVillage[m.village] = [];
     byVillage[m.village].push(row);
   }
