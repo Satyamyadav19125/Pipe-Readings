@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PhotoUpload from '@/components/PhotoUpload';
 import MeterStatusTable from '@/components/MeterStatusTable';
+import WhatPipeButton from '@/components/WhatPipeButton';
 import Lightbox from '@/components/Lightbox';
 
 // Never throw "Unexpected end of JSON input" on an empty/non-JSON response.
@@ -257,6 +258,7 @@ export default function AssignmentsPage() {
       {user && !isAdmin && (
         <div className="pt-2">
           <h3 className="text-sm font-semibold text-slate-700 mb-2">📋 Weekly pipe tracker</h3>
+          <WhatPipeButton />
           <MeterStatusTable />
         </div>
       )}
