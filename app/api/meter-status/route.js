@@ -7,6 +7,25 @@ import { startOfWeek, endOfWeek, daysRemaining, readingDate } from '@/lib/weekly
 
 export const dynamic = 'force-dynamic';
 
+// Parse a Kobo location ("lat lng alt acc" string or _geolocation array).
+function parseLoc(sub) {
+  const raw = getField(sub, 'location');
+  if (typeof raw === 'string') {
+    const p = raw.trim().split(/\s+/).map(Number);
+    if (p.length >= 2 && Number.isFinite(p[0]) && Number.isFinite(p[1])) return { lat: p[0], lng: p[1] };
+  }
+  const geo = sub._geolocation;
+  if (Array.isArray(geo) && geo.length >= 2 && Number.isFinite(Number(geo[0])) && Number.isFinite(Number(geo[1]))) {
+    return { lat: Number(geo[0]), lng: Number(geo[1]) };
+  }
+  return null;
+}
+function median(nums) {
+  if (!nums.length) return null;
+  const s = [...nums].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
 // Every meter in the user's villages with its read-count + status for a period.
 // Period membership uses the reading's DATE field, not its upload time.
 //   ?week=this  (default) — the current period
@@ -80,7 +99,7 @@ export async function GET(request) {
       // Turned-off farms/pipes must never show up as pending readings.
       if (offFarms.has(lcv(pm.farm)) || offPipes.has(lcv(pm.serial))) continue;
       const key = `${village}|||${pm.serial}`;
-      meters[key] = { serial: pm.serial, farm: pm.farm || null, village, countThisPeriod: 0, lastReading: null, lastDate: null, lastSurveyor: null, lastTs: 0 };
+      meters[key] = { serial: pm.serial, farm: pm.farm || null, village, countThisPeriod: 0, lastReading: null, lastDate: null, lastSurveyor: null, lastTs: 0, locs: [] };
     }
   }
 
@@ -94,10 +113,12 @@ export async function GET(request) {
 
     const key = `${village}|||${serial}`;
     if (!meters[key]) {
-      meters[key] = { serial, farm: getField(s, 'farm') || null, village, countThisPeriod: 0, lastReading: null, lastDate: null, lastSurveyor: null, lastTs: 0 };
+      meters[key] = { serial, farm: getField(s, 'farm') || null, village, countThisPeriod: 0, lastReading: null, lastDate: null, lastSurveyor: null, lastTs: 0, locs: [] };
     }
     const m = meters[key];
     if (!m.farm) m.farm = getField(s, 'farm') || null;
+    const loc = parseLoc(s);
+    if (loc) m.locs.push(loc);
 
     const rt = readingDate(s).getTime();
     if (!Number.isNaN(rt) && rt >= periodStart.getTime() && rt < periodEnd.getTime()) {
@@ -118,7 +139,17 @@ export async function GET(request) {
     const m = meters[key];
     const status = m.countThisPeriod >= target ? 'done' : m.countThisPeriod > 0 ? 'partial' : 'pending';
     const rl = (pipeLocs.locations || {})[m.serial] || (pipeLocs.locations || {})[String(m.serial).toUpperCase()] || null;
-    const row = { serial: m.serial, farm: m.farm, countThisPeriod: m.countThisPeriod, status, lastReading: m.lastReading, lastDate: m.lastDate, lastSurveyor: m.lastSurveyor, refLoc: rl ? `${rl.lat}, ${rl.lng}` : null };
+    // Where the pipe actually is: prefer the admin reference location, else the
+    // median of every reading's GPS (robust to a stray point). Feeds the mini
+    // map + "how far am I?" in the details panel.
+    let lat = null, lng = null;
+    if (rl && Number.isFinite(Number(rl.lat)) && Number.isFinite(Number(rl.lng))) {
+      lat = Number(rl.lat); lng = Number(rl.lng);
+    } else if (m.locs.length) {
+      lat = median(m.locs.map((l) => l.lat));
+      lng = median(m.locs.map((l) => l.lng));
+    }
+    const row = { serial: m.serial, farm: m.farm, countThisPeriod: m.countThisPeriod, status, lastReading: m.lastReading, lastDate: m.lastDate, lastSurveyor: m.lastSurveyor, refLoc: rl ? `${rl.lat}, ${rl.lng}` : null, lat, lng };
     if (!byVillage[m.village]) byVillage[m.village] = [];
     byVillage[m.village].push(row);
   }

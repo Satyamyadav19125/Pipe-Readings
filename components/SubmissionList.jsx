@@ -3,6 +3,28 @@
 import { useState } from 'react';
 import { getField } from '@/lib/fieldMap';
 import Lightbox from '@/components/Lightbox';
+import MiniMap from '@/components/MiniMap';
+
+// Parse a Kobo location value ("lat lng alt acc" string, or _geolocation array)
+// into { lat, lng } for the mini-map. Returns null when there's no usable GPS.
+function parseSubLoc(submission) {
+  const raw = getField(submission, 'location');
+  if (typeof raw === 'string') {
+    const p = raw.trim().split(/\s+/).map(Number);
+    if (p.length >= 2 && Number.isFinite(p[0]) && Number.isFinite(p[1])) return { lat: p[0], lng: p[1] };
+  }
+  const geo = submission._geolocation;
+  if (Array.isArray(geo) && geo.length >= 2 && Number.isFinite(Number(geo[0])) && Number.isFinite(Number(geo[1]))) {
+    return { lat: Number(geo[0]), lng: Number(geo[1]) };
+  }
+  return null;
+}
+
+// Fields already shown on the collapsed card (village, farm, pipe id) — hidden
+// from the expanded "Form data" list so the detail doesn't repeat the header.
+const DETAIL_SKIP_SEGMENTS = new Set([
+  'village', 'village_name', 'q2', 'farm', 'farm_id', 'pipes', 'pipe', 'pipe_id', 'serial', 'meter_id',
+]);
 
 export default function SubmissionList({ submissions, flags, allSubmissions, canVerify = false, verifiedIds = [] }) {
   const [openId, setOpenId] = useState(null);
@@ -460,6 +482,8 @@ function SubmissionPanel({ label, submission, highlight }) {
       <dl className="space-y-1 mb-3">
         {Object.entries(submission)
           .filter(([k]) => !k.startsWith('_') && !k.includes('/uuid') && !k.includes('/instanceID'))
+          // Don't repeat village / farm / pipe ID — they're already on the card.
+          .filter(([k]) => !DETAIL_SKIP_SEGMENTS.has(k.split('/').pop().toLowerCase()))
           .slice(0, 10)
           .map(([k, v]) => (
             <div key={k} className="grid grid-cols-[110px_1fr] gap-2 text-xs">
@@ -468,6 +492,21 @@ function SubmissionPanel({ label, submission, highlight }) {
             </div>
           ))}
       </dl>
+      {(() => {
+        const loc = parseSubLoc(submission);
+        if (!loc) return null;
+        return (
+          <div className="mb-3">
+            <div className="text-[11px] text-slate-500 mb-1">📍 Where this reading was taken</div>
+            <MiniMap lat={loc.lat} lng={loc.lng} label={getField(submission, 'serial') || 'Reading location'} />
+            <a target="_blank" rel="noreferrer"
+              href={`https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}`}
+              className="inline-block mt-1.5 text-[11px] px-2.5 py-1 rounded-full bg-field-600 text-white font-medium hover:bg-field-700">
+              🧭 Directions
+            </a>
+          </div>
+        );
+      })()}
       {photos.length > 0 && (
         <div className={`grid ${photos.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
           {photos.slice(0, 2).map((a) => (

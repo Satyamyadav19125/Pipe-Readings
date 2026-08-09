@@ -59,7 +59,9 @@ export default async function KoboViewPage({ searchParams }) {
   try { standards = (await getSettings())?.pipe || null; } catch { /* defaults */ }
   let submissions = [];
   let error = null;
-  try { submissions = await fetchSubmissions(); }
+  // RAW view: pull the exact records Kobo holds, with NO admin corrections
+  // overlaid, so this page mirrors the KoboToolbox data table 1:1.
+  try { submissions = await fetchSubmissions({ applyCorrections: false }); }
   catch (e) { error = e.message; }
 
   if (error) return <div className="bg-red-50 border border-red-200 rounded p-4 text-red-800 text-sm">{error}</div>;
@@ -122,15 +124,26 @@ export default async function KoboViewPage({ searchParams }) {
     for (const [seg, v] of Object.entries(raw)) {
       rows2.push([seg.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()), v]);
     }
+    // The exact raw Kobo record — every stored field/key, shown verbatim in the
+    // detail modal so admins can see the data precisely as the database holds
+    // it (nothing renamed, reordered or corrected). Attachments are dropped
+    // here because the photos already render as images above.
+    const allFields = Object.entries(s)
+      .filter(([k]) => k !== '_attachments')
+      .map(([k, v]) => [k, v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v))]);
     return {
       photos,
       photoUrls: photos.map((x) => x.url),
       photosCount: photos.length,
       rows: rows2,
+      allFields,
       farm: getField(s, 'farm'),
-      validation: getField(s, 'validation'),
+      // Outside-height measurement (was being overwritten by the Kobo
+      // validation-status label below, so the column always showed "–").
+      validation: getField(s, 'validation') ?? '',
       id: s._id,
-      validation: (s._validation_status && s._validation_status.label) || '',
+      uid: String(s._id),
+      koboStatus: (s._validation_status && s._validation_status.label) || '',
       start: getField(s, 'startTime') || '',
       end: getField(s, 'endTime') || '',
       date: getField(s, 'date') || '',
@@ -150,8 +163,8 @@ export default async function KoboViewPage({ searchParams }) {
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <div>
-          <h2 className="text-xl font-semibold">🪞 Kobo Data View</h2>
-          <p className="text-sm text-slate-500">Spreadsheet view of all submissions, like the KoboToolbox table. Search any column, tap a row number to expand. {rows.length.toLocaleString()} rows shown.</p>
+          <h2 className="text-xl font-semibold">🪞 Kobo Data View <span className="align-middle text-[11px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">RAW</span></h2>
+          <p className="text-sm text-slate-500">The exact data KoboToolbox holds — no corrections applied. Search any column (including the submission UID), tap a row number to expand and see every raw field. {rows.length.toLocaleString()} rows shown.</p>
         </div>
         <div className="flex items-center gap-2">
           {koboUrl && (

@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 // Every question the surveyor fills, as a column — the table slides
 // horizontally to show the whole form without opening the detail view.
 const COLUMNS = [
+  { key: 'uid', label: 'UID', width: 90, mobile: false },
   { key: 'date', label: 'Date', width: 100, mobile: true },
   { key: 'start', label: 'Start', width: 120, mobile: false },
   { key: 'end', label: 'End', width: 120, mobile: false },
@@ -30,6 +31,7 @@ const PAGE_SIZES = [30, 50, 100];
 function cellClass(c) {
   const base = 'px-2 md:px-3 py-2 ' + hideCls(c);
   switch (c.key) {
+    case 'uid': return base + ' font-mono text-[11px] text-slate-500 whitespace-nowrap';
     case 'date': return base + ' whitespace-nowrap text-xs md:text-sm';
     case 'start':
     case 'end': return base + ' text-xs text-slate-600 whitespace-nowrap';
@@ -205,6 +207,25 @@ export default function KoboTable({ rows = [], standards = null }) {
                     <Row k="Reading" v={detail.reading} bold />
                   </>)}
               <Row k="Submitted" v={detail.submitted} />
+              {Array.isArray(detail.allFields) && detail.allFields.length > 0 && (
+                <details className="mt-2 border border-slate-200 rounded-lg overflow-hidden">
+                  <summary className="cursor-pointer select-none bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                    🗄️ Raw Kobo record ({detail.allFields.length} fields) — exactly as stored
+                  </summary>
+                  <div className="p-2 max-h-64 overflow-y-auto bg-white">
+                    <table className="w-full text-[11px]">
+                      <tbody>
+                        {detail.allFields.map(([k, v], i) => (
+                          <tr key={i} className="border-b border-slate-50 align-top">
+                            <td className="py-1 pr-2 font-mono text-slate-500 whitespace-nowrap break-all">{k}</td>
+                            <td className="py-1 font-mono text-slate-800 break-all">{v === '' ? '—' : v}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
               {detail.lat != null && detail.lng != null && (
                 <div className="pt-1">
                   <MiniMap lat={detail.lat} lng={detail.lng} label={detail.meter || detail.village} />

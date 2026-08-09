@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { buildPrefillUrl } from '@/lib/prefill';
+import MiniMap from '@/components/MiniMap';
 
 const STATUS = {
   done:    { label: '✓ Done',         dot: 'bg-emerald-500', chip: 'bg-emerald-100 text-emerald-800 border-emerald-200', row: 'bg-emerald-50/40' },
@@ -168,13 +169,11 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {m.status !== 'done' && (
-                        <button onClick={() => setOpenCheat((o) => ({ ...o, [m.serial]: !o[m.serial] }))}
-                          className="text-[11px] px-2 py-1 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-100"
-                          title="Show farm ID and GPS to type into the KoboCollect app">
-                          📋 details
-                        </button>
-                      )}
+                      <button onClick={() => setOpenCheat((o) => ({ ...o, [m.serial]: !o[m.serial] }))}
+                        className="text-[11px] px-2 py-1 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-100"
+                        title="Show farm ID, GPS and a mini map for this pipe">
+                        📋 details
+                      </button>
                       {/* Pre-filled Kobo web-form link (for those not using the app) */}
                       {data.formUploadUrl && m.status !== 'done' && (
                         <a
@@ -206,6 +205,9 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
                       <CopyRow label="Pipe ID" value={m.serial} />
                       {m.refLoc && <CopyRow label="Reference GPS" value={m.refLoc} />}
                       <div className="text-[10px] text-slate-400 pt-0.5">Then just fill the outside height, water level, GPS and photos.</div>
+                      {m.lat != null && m.lng != null && (
+                        <PipeDetailMap lat={m.lat} lng={m.lng} serial={m.serial} />
+                      )}
                     </div>
                   )}
                 </li>
@@ -228,6 +230,58 @@ function FilterBtn({ active, onClick, children }) {
   );
 }
 
+
+// Mini map of where the pipe sits (reference GPS, or the median of its
+// readings) plus a "how far am I?" button that uses the phone's location to
+// show the distance from here to the pipe.
+function haversineM(a, b) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const la1 = toRad(a.lat), la2 = toRad(b.lat);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+function PipeDetailMap({ lat, lng, serial }) {
+  const [state, setState] = useState('idle'); // idle | locating | done | error
+  const [dist, setDist] = useState(null);
+  const [err, setErr] = useState('');
+
+  function howFar() {
+    setErr(''); setState('locating');
+    if (!('geolocation' in navigator)) { setErr('This device can’t share location.'); setState('error'); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const d = haversineM({ lat: pos.coords.latitude, lng: pos.coords.longitude }, { lat, lng });
+        setDist(d); setState('done');
+      },
+      (geoErr) => {
+        setErr(geoErr.code === 1 ? 'Location permission denied.' : 'Couldn’t get a GPS fix — try again in open sky.');
+        setState('error');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
+  }
+  const pretty = dist == null ? '' : dist >= 1000 ? `${(dist / 1000).toFixed(2)} km` : `${Math.round(dist)} m`;
+
+  return (
+    <div className="pt-1.5 space-y-1.5">
+      <div className="text-[10px] text-slate-400">📍 Where this pipe is (most-common reading location):</div>
+      <MiniMap lat={lat} lng={lng} label={serial} />
+      <div className="flex items-center gap-2 flex-wrap">
+        <button type="button" onClick={howFar} disabled={state === 'locating'}
+          className="text-[11px] px-2.5 py-1 rounded-full bg-brand-600 text-white font-medium hover:bg-brand-700 disabled:opacity-50">
+          {state === 'locating' ? 'Locating…' : '📍 How far am I?'}
+        </button>
+        {state === 'done' && <span className="text-[11px] text-slate-700 font-medium">You are <b>{pretty}</b> from this pipe.</span>}
+        <a target="_blank" rel="noreferrer" href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`}
+          className="text-[11px] px-2.5 py-1 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-100">🧭 Directions</a>
+      </div>
+      {state === 'error' && <div className="text-[11px] text-red-600">{err}</div>}
+    </div>
+  );
+}
 
 // One label:value row with a copy button, for the KoboCollect cheat-sheet.
 function CopyRow({ label, value }) {

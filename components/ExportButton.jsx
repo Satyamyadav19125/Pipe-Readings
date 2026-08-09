@@ -39,7 +39,7 @@ export default function ExportButton({ extraParams = {} }) {
       {open && (
         <div className="absolute right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden z-20 min-w-[160px]">
           <a href={url('xlsx')} className="block px-3 py-2 text-sm hover:bg-slate-50" onClick={() => setOpen(false)}>
-            📗 Excel (XLSX + Summary)
+            📗 Excel — tabs + summary
           </a>
           <a href={url('csv')} className="block px-3 py-2 text-sm hover:bg-slate-50 border-t border-slate-100" onClick={() => setOpen(false)}>
             📊 CSV

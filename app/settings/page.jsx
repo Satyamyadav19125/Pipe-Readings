@@ -7,7 +7,8 @@ import DataStorage from '@/components/DataStorage';
 const FLAG_LABELS = {
   // ON by default for pipes
   missing_photo: 'Missing photo on a submission',
-  stale_no_reading: 'Stale — no reading for 7+ days',
+  stale_no_reading: 'Stale — no reading within the current reading period',
+  location_far: 'GPS far outside the whole project area (swapped / mistyped lat-long)',
   stale_unchanged: 'Stuck — 3 identical water-level readings in a row',
   future_date: 'Future-dated reading',
   out_of_sequence: 'Reading date earlier than the previous one',
@@ -95,7 +96,7 @@ export default function SettingsPage() {
       // Fill them with safe defaults so the page never crashes on access.
       setSettings({
         contact: {}, redFlags: {}, project: {}, forms: [],
-        pipe: { insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0, irrigateAtOrBelowMm: 50 },
+        pipe: { insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0, irrigateAtOrBelowMm: 50, maxLocationKm: 100 },
         security: { adminPasswords: [] },
         reading: {
           target: 2, periodLabel: 'week', periodDays: 7,
@@ -108,7 +109,7 @@ export default function SettingsPage() {
         project: { ...(data.settings.project || {}) },
         forms: Array.isArray(data.settings.forms) ? data.settings.forms : [],
         pipe: {
-          insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0, irrigateAtOrBelowMm: 50,
+          insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0, irrigateAtOrBelowMm: 50, maxLocationKm: 100,
           ...(data.settings.pipe || {}),
         },
         security: {
@@ -333,6 +334,16 @@ export default function SettingsPage() {
           </div>
           <p className="text-[11px] text-slate-500">A pipe whose <b>latest</b> inside water level is at or below this is marked <b style={{color:'#dc2626'}}>🔴 Irrigate now</b> on the Map (Irrigation mode) and Overview. Just above it shows <b style={{color:'#f59e0b'}}>🟠 Getting low</b>; higher is <b style={{color:'#2563eb'}}>🔵 Wet</b>. Clear the box to hide the irrigation view.</p>
         </div>
+        <div className="border border-rose-200 bg-rose-50/40 rounded-lg p-3 space-y-2">
+          <div className="text-xs font-semibold text-slate-700">📍 GPS sanity check</div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Max distance from project centre (km)">
+              <input type="number" min="1" value={settings.pipe?.maxLocationKm ?? ''} placeholder="100"
+                onChange={(e) => updatePipe('maxLocationKm', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
+            </Field>
+          </div>
+          <p className="text-[11px] text-slate-500">Any reading whose GPS is farther than this from the centre of <i>all</i> readings raises <i>GPS far outside the whole project area</i> — this catches a swapped or mistyped latitude/longitude (e.g. a pipe that lands hundreds of km away). Requires the <b>🚩 Red flag rules</b> toggle of the same name to be on. Clear the box to disable.</p>
+        </div>
         <p className="text-[11px] text-slate-500">Clear any box to disable that check without touching the red-flag toggles.</p>
       </Section>
 
@@ -485,6 +496,20 @@ function Toggle({ label, checked, onChange }) {
       <span>{label}</span>
       <input type="checkbox" checked={!!checked} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4"/>
     </label>
+  );
+}
+
+function CountTile({ label, value, sub, tone = 'slate' }) {
+  const tones = {
+    emerald: 'bg-emerald-50 text-emerald-900 border-emerald-100',
+    slate: 'bg-slate-50 text-slate-700 border-slate-200',
+  };
+  return (
+    <div className={`rounded-lg border p-2.5 ${tones[tone] || tones.slate}`}>
+      <div className="text-xl font-bold tabular-nums leading-none">{value}</div>
+      <div className="text-[11px] font-medium mt-0.5">{label}</div>
+      {sub && <div className="text-[10px] opacity-70">{sub}</div>}
+    </div>
   );
 }
 
@@ -668,6 +693,7 @@ function RegistryPanel() {
   const [offFarms, setOffFarms] = useState(new Set());
   const [offPipes, setOffPipes] = useState(new Set());
   const [q, setQ] = useState('');
+  const [view, setView] = useState('all'); // all | active | off
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [loaded, setLoaded] = useState(false);
@@ -691,6 +717,19 @@ function RegistryPanel() {
       farms[farm].pipes.push(p.serial);
     }
   }
+  // Live counts of how many farms and pipes are active vs switched off.
+  // A pipe counts as off if its own ID is off OR its whole farm is off.
+  const totalFarms = Object.keys(farms).length;
+  const totalPipes = master?.pipes?.length || 0;
+  const pipeIsOff = (serial, farm) => offPipes.has(serial) || offFarms.has(farm);
+  let offPipeCount = 0;
+  for (const [farm, info] of Object.entries(farms)) {
+    for (const s of info.pipes) if (pipeIsOff(s, farm)) offPipeCount += 1;
+  }
+  const offFarmCount = Object.keys(farms).filter((f) => offFarms.has(f)).length;
+  const activeFarms = totalFarms - offFarmCount;
+  const activePipes = totalPipes - offPipeCount;
+
   // Search accepts several IDs separated by commas, e.g.
   //   "PLT_10194, PLT_5037"  or  "AM_10194A, AV_5037B"
   // A farm matches if its own ID matches OR any of its pipes match.
@@ -699,8 +738,9 @@ function RegistryPanel() {
     if (terms.length === 0) return true;
     return terms.some((t) => farm.toLowerCase().includes(t) || pipes.some((p) => p.toLowerCase().includes(t)));
   };
+  const matchesView = (farm) => view === 'all' || (view === 'active' ? !offFarms.has(farm) : offFarms.has(farm));
   const farmList = Object.entries(farms)
-    .filter(([farm, info]) => matches(farm, info.pipes))
+    .filter(([farm, info]) => matches(farm, info.pipes) && matchesView(farm))
     .sort((a, b) => a[0].localeCompare(b[0]));
 
   function toggleSet(setter, set, key) {
@@ -726,13 +766,33 @@ function RegistryPanel() {
 
   return (
     <div className="space-y-3">
+      {/* Live active / off summary — how many farms and pipes are on the map */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <CountTile label="Active farms" value={activeFarms} sub={`of ${totalFarms}`} tone="emerald" />
+        <CountTile label="Active pipes" value={activePipes} sub={`of ${totalPipes}`} tone="emerald" />
+        <CountTile label="Farms off" value={offFarmCount} sub={offFarmCount ? 'hidden from surveyors' : 'none'} tone="slate" />
+        <CountTile label="Pipes off" value={offPipeCount} sub={offPipeCount ? 'incl. whole-farm off' : 'none'} tone="slate" />
+      </div>
+
       <div className="flex items-center gap-2 flex-wrap">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search farm or pipe IDs — separate with commas"
           className="input flex-1 min-w-[160px]" />
-        <span className="text-xs text-slate-500">{offFarms.size} farms · {offPipes.size} pipes off</span>
+        <div className="flex bg-slate-100 rounded-lg p-0.5 text-xs">
+          {[['all', 'All'], ['active', 'Active'], ['off', 'Off']].map(([k, lbl]) => (
+            <button key={k} onClick={() => setView(k)}
+              className={`px-2.5 py-1.5 rounded-md whitespace-nowrap transition ${view === k ? 'bg-brand-600 text-white font-medium' : 'text-slate-600 hover:bg-white'}`}>
+              {lbl}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-[26rem] overflow-y-auto">
+        {farmList.length === 0 && (
+          <div className="p-4 text-center text-xs text-slate-400">
+            {view === 'off' ? 'No farms are switched off.' : view === 'active' ? 'No active farms match.' : 'No farms match your search.'}
+          </div>
+        )}
         {farmList.map(([farm, info]) => {
           const farmOff = offFarms.has(farm);
           return (

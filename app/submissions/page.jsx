@@ -47,18 +47,29 @@ export default async function SubmissionsPage({ searchParams }) {
   const filtered0 = applyUrlFilters(scopedAll, sp);
   const redCount = canSeeFlags ? filtered0.filter((s) => isRed(s._id)).length : 0;
   const flagFilter = (canSeeFlags || isAdmin) ? (sp.flag || 'all') : 'all';
-  // Readings an admin has manually corrected or marked dead.
-  const isTouched = (s) => !!s._correction;
-  const touchedCount = isAdmin ? filtered0.filter(isTouched).length : 0;
+
+  // Correction status of a reading, for the Raw / Corrected / Dead tabs.
+  //  - raw       : untouched by an admin
+  //  - corrected : an admin edited the value or one or more fields
+  //  - dead      : an admin marked it a mistake (excluded from analytics)
+  const isDead = (s) => s._correction && s._correction.field === 'dead';
+  const isCorrected = (s) => s._correction && s._correction.field !== 'dead';
+  const isRaw = (s) => !s._correction;
+  const rawCount = filtered0.filter(isRaw).length;
+  const correctedCount = filtered0.filter(isCorrected).length;
+  const deadCount = filtered0.filter(isDead).length;
+
   const filtered = filtered0.filter((s) => {
-    if (flagFilter === 'fixed') return isAdmin && isTouched(s);
-    // Dead readings are hidden from the normal lists (they're mistakes) and
-    // only shown under the "Fixed & dead" tab.
-    if (s._correction && s._correction.field === 'dead' && flagFilter !== 'fixed') return false;
+    // The Dead tab shows dead readings only; every other tab hides them since
+    // they're mistakes.
+    if (flagFilter === 'dead') return isDead(s);
+    if (isDead(s)) return false;
+    if (flagFilter === 'raw') return isRaw(s);
+    if (flagFilter === 'corrected' || flagFilter === 'fixed') return isCorrected(s);
     if (!canSeeFlags) return true;
     if (flagFilter === 'flagged') return isRed(s._id);
     if (flagFilter === 'clean') return !isRed(s._id);
-    return true;
+    return true; // 'all'
   });
 
   const sorted = [...filtered].sort(
@@ -95,10 +106,18 @@ export default async function SubmissionsPage({ searchParams }) {
           )}
           <div className="flex gap-2 overflow-x-auto pb-1">
             <FlagChip name="all" current={flagFilter} sp={sp}>All</FlagChip>
-            <FlagChip name="clean" current={flagFilter} sp={sp}>✓ Clean</FlagChip>
-            <FlagChip name="flagged" current={flagFilter} sp={sp} danger>🚩 Flagged ({redCount})</FlagChip>
-            {isAdmin && (
-              <FlagChip name="fixed" current={flagFilter} sp={sp}>✎ Fixed &amp; dead ({touchedCount})</FlagChip>
+            {isAdmin ? (
+              <>
+                <FlagChip name="raw" current={flagFilter} sp={sp}>🗂️ Raw ({rawCount})</FlagChip>
+                <FlagChip name="corrected" current={flagFilter} sp={sp}>✎ Corrected ({correctedCount})</FlagChip>
+                <FlagChip name="dead" current={flagFilter} sp={sp}>🗑️ Dead ({deadCount})</FlagChip>
+                <FlagChip name="flagged" current={flagFilter} sp={sp} danger>🚩 Flagged ({redCount})</FlagChip>
+              </>
+            ) : (
+              <>
+                <FlagChip name="clean" current={flagFilter} sp={sp}>✓ Clean</FlagChip>
+                <FlagChip name="flagged" current={flagFilter} sp={sp} danger>🚩 Flagged ({redCount})</FlagChip>
+              </>
             )}
           </div>
         </>
