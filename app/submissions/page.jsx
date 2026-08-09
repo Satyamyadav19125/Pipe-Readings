@@ -58,6 +58,10 @@ export default async function SubmissionsPage({ searchParams }) {
   const rawCount = filtered0.filter(isRaw).length;
   const correctedCount = filtered0.filter(isCorrected).length;
   const deadCount = filtered0.filter(isDead).length;
+  // "Clean" = the trustworthy dataset: live (not dead) readings with no red
+  // flag. Correcting a flagged reading clears its flag, so your fixes land
+  // here — this is the most-accurate data to work from.
+  const cleanCount = canSeeFlags ? filtered0.filter((s) => !isDead(s) && !isRed(s._id)).length : 0;
 
   const filtered = filtered0.filter((s) => {
     // The Dead tab shows dead readings only; every other tab hides them since
@@ -110,6 +114,7 @@ export default async function SubmissionsPage({ searchParams }) {
               <>
                 <FlagChip name="raw" current={flagFilter} sp={sp}>🗂️ Raw ({rawCount})</FlagChip>
                 <FlagChip name="corrected" current={flagFilter} sp={sp}>✎ Corrected ({correctedCount})</FlagChip>
+                <FlagChip name="clean" current={flagFilter} sp={sp}>✓ Clean ({cleanCount})</FlagChip>
                 <FlagChip name="dead" current={flagFilter} sp={sp}>🗑️ Dead ({deadCount})</FlagChip>
                 <FlagChip name="flagged" current={flagFilter} sp={sp} danger>🚩 Flagged ({redCount})</FlagChip>
               </>

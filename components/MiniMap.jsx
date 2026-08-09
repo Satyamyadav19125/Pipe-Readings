@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-// Tiny embedded Leaflet map with a single pin — used inside the Kobo View
-// detail modal so every submission shows exactly where it was taken.
+// Tiny embedded Leaflet map with a pin for the pipe/reading, and (optionally) a
+// second marker for the viewer's own GPS position — so "how far am I?" shows
+// WHERE you are standing, with a dashed line to the pipe, not just a number.
 // Loads Leaflet from the same CDN the main /map page already uses.
 const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
 const LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
@@ -30,10 +31,13 @@ function loadLeaflet() {
   });
 }
 
-export default function MiniMap({ lat, lng, label = '' }) {
+export default function MiniMap({ lat, lng, label = '', me = null }) {
   const ref = useRef(null);
   const mapRef = useRef(null);
+  const meLayerRef = useRef(null);
+  const [ready, setReady] = useState(false);
 
+  // ---- Create the map + the pipe/reading pin once. ----
   useEffect(() => {
     let cancelled = false;
     if (lat == null || lng == null) return;
@@ -56,6 +60,7 @@ export default function MiniMap({ lat, lng, label = '' }) {
       L.control.layers({ '🗺️ Street': street, '🛰️ Satellite': satellite, '⛰️ Topo': topo }, {}, { position: 'topright' }).addTo(map);
       L.marker([lat, lng]).addTo(map).bindPopup(label || `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
       mapRef.current = map;
+      if (!cancelled) setReady(true);
       // Modal opens with an animation — recalc size once it settles.
       setTimeout(() => map.invalidateSize(), 250);
       setTimeout(() => map.invalidateSize(), 800);
@@ -63,8 +68,27 @@ export default function MiniMap({ lat, lng, label = '' }) {
     return () => {
       cancelled = true;
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+      meLayerRef.current = null;
+      setReady(false);
     };
   }, [lat, lng, label]);
+
+  // ---- Add / update the "you are here" marker whenever `me` changes. ----
+  useEffect(() => {
+    const map = mapRef.current;
+    const L = typeof window !== 'undefined' ? window.L : null;
+    if (!map || !L || !ready) return;
+    if (meLayerRef.current) { map.removeLayer(meLayerRef.current); meLayerRef.current = null; }
+    if (!me || me.lat == null || me.lng == null) return;
+    const group = L.layerGroup();
+    L.circleMarker([me.lat, me.lng], { radius: 8, color: '#1d4ed8', weight: 3, fillColor: '#3b82f6', fillOpacity: 0.9 })
+      .bindPopup('📍 You are here').addTo(group);
+    L.polyline([[lat, lng], [me.lat, me.lng]], { color: '#1d4ed8', weight: 2, dashArray: '5 5', opacity: 0.8 }).addTo(group);
+    group.addTo(map);
+    meLayerRef.current = group;
+    try { map.fitBounds(L.latLngBounds([[lat, lng], [me.lat, me.lng]]).pad(0.35)); } catch {}
+    setTimeout(() => map.invalidateSize(), 100);
+  }, [me, ready, lat, lng]);
 
   if (lat == null || lng == null) return null;
   return <div ref={ref} className="w-full h-44 rounded-lg border border-slate-200 overflow-hidden" />;

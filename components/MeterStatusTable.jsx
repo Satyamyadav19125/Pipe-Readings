@@ -246,6 +246,7 @@ function haversineM(a, b) {
 function PipeDetailMap({ lat, lng, serial }) {
   const [state, setState] = useState('idle'); // idle | locating | done | error
   const [dist, setDist] = useState(null);
+  const [me, setMe] = useState(null);
   const [err, setErr] = useState('');
 
   function howFar() {
@@ -253,8 +254,10 @@ function PipeDetailMap({ lat, lng, serial }) {
     if (!('geolocation' in navigator)) { setErr('This device can’t share location.'); setState('error'); return; }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const d = haversineM({ lat: pos.coords.latitude, lng: pos.coords.longitude }, { lat, lng });
-        setDist(d); setState('done');
+        const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setMe(here);
+        setDist(haversineM(here, { lat, lng }));
+        setState('done');
       },
       (geoErr) => {
         setErr(geoErr.code === 1 ? 'Location permission denied.' : 'Couldn’t get a GPS fix — try again in open sky.');
@@ -267,14 +270,16 @@ function PipeDetailMap({ lat, lng, serial }) {
 
   return (
     <div className="pt-1.5 space-y-1.5">
-      <div className="text-[10px] text-slate-400">📍 Where this pipe is (most-common reading location):</div>
-      <MiniMap lat={lat} lng={lng} label={serial} />
+      <div className="text-[10px] text-slate-400">
+        📍 Where this pipe is (most-common reading location){me ? ' · 🔵 = you' : ''}:
+      </div>
+      <MiniMap lat={lat} lng={lng} label={serial} me={me} />
       <div className="flex items-center gap-2 flex-wrap">
         <button type="button" onClick={howFar} disabled={state === 'locating'}
           className="text-[11px] px-2.5 py-1 rounded-full bg-brand-600 text-white font-medium hover:bg-brand-700 disabled:opacity-50">
-          {state === 'locating' ? 'Locating…' : '📍 How far am I?'}
+          {state === 'locating' ? 'Locating…' : me ? '📍 Update my location' : '📍 How far am I?'}
         </button>
-        {state === 'done' && <span className="text-[11px] text-slate-700 font-medium">You are <b>{pretty}</b> from this pipe.</span>}
+        {state === 'done' && <span className="text-[11px] text-slate-700 font-medium">You are <b>{pretty}</b> from this pipe (blue dot on the map).</span>}
         <a target="_blank" rel="noreferrer" href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`}
           className="text-[11px] px-2.5 py-1 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-100">🧭 Directions</a>
       </div>

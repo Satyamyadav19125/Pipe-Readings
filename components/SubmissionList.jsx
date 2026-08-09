@@ -192,11 +192,14 @@ function DuplicateCompare({ current, other, canVerify }) {
     return getField(sub, key) ?? '';
   };
   async function markDead(sub) {
+    // Ask for a reason so the dead reading records WHY. Cancel aborts.
+    const note = window.prompt('Why is this reading dead? (add a short note — optional)', '');
+    if (note === null) return;
     setBusy(sub._id);
     try {
       const res = await fetch('/api/corrections', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ submissionId: sub._id, field: 'dead', oldValue: val(sub, 'reading') }),
+        body: JSON.stringify({ submissionId: sub._id, field: 'dead', oldValue: val(sub, 'reading'), note }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Failed');
       window.location.reload();
@@ -356,7 +359,7 @@ function ReadingCorrection({ submission }) {
   const rawValue = existing && existing.field !== 'dead'
     ? existing.oldValue
     : (submission['group_2/Readings_mm'] ?? submission.reading ?? '');
-  const [mode, setMode] = useState(null); // null | 'value'
+  const [mode, setMode] = useState(null); // null | 'value' | 'dead'
   const [newValue, setNewValue] = useState(existing && !isDead ? existing.newValue : '');
   const [note, setNote] = useState(existing ? (existing.note || '') : '');
   const [busy, setBusy] = useState(false);
@@ -380,6 +383,7 @@ function ReadingCorrection({ submission }) {
     post({ field: 'reading', oldValue: rawValue, newValue: String(newValue).trim(), note });
   };
   const markDead = () => post({ field: 'dead', oldValue: rawValue, note });
+  const beginDead = () => { setErr(''); setNote(existing ? (existing.note || '') : ''); setMode('dead'); };
   async function revert() {
     setBusy(true); setErr('');
     try {
@@ -433,16 +437,20 @@ function ReadingCorrection({ submission }) {
   // --- No correction yet: offer both actions ---
   return (
     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-      {mode !== 'value' ? (
+      {mode === null && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-slate-600 mr-1">Reading looks wrong?</span>
           <button onClick={() => setMode('value')} className="text-xs px-3 py-1.5 rounded-lg border border-amber-400 text-amber-800 hover:bg-amber-100">✎ Correct the value</button>
-          <button onClick={markDead} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-700 hover:bg-slate-100 disabled:opacity-50">🗑️ Mark as dead (mistake / duplicate)</button>
+          <button onClick={beginDead} className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-700 hover:bg-slate-100">🗑️ Mark as dead (mistake / duplicate)</button>
         </div>
-      ) : (
+      )}
+      {mode === 'value' && (
         <ValueForm rawValue={rawValue} newValue={newValue} setNewValue={setNewValue} note={note} setNote={setNote} err={err} busy={busy} onSave={saveValue} onCancel={() => setMode(null)} />
       )}
-      {err && mode !== 'value' && <div className="text-xs text-red-600 mt-1">{err}</div>}
+      {mode === 'dead' && (
+        <DeadForm note={note} setNote={setNote} err={err} busy={busy} onConfirm={markDead} onCancel={() => setMode(null)} />
+      )}
+      {err && mode === null && <div className="text-xs text-red-600 mt-1">{err}</div>}
     </div>
   );
 }
@@ -459,6 +467,25 @@ function ValueForm({ rawValue, newValue, setNewValue, note, setNote, err, busy, 
       <div className="flex gap-2">
         <button onClick={onSave} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 disabled:opacity-50">{busy ? 'Saving…' : 'Save correction'}</button>
         <button onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600">Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// Note field shown before a reading is marked dead, so the admin records WHY
+// (mistake, duplicate, wrong pipe, etc.). The note is saved and displayed on
+// the dead reading afterwards.
+function DeadForm({ note, setNote, err, busy, onConfirm, onCancel }) {
+  return (
+    <div className="space-y-2">
+      <div className="text-xs text-slate-600">Why is this reading dead? (mistake, duplicate, wrong pipe…). This note is saved with the dead reading.</div>
+      <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
+        placeholder="e.g. Duplicate of the reading taken the same day — this one is the mistake."
+        className="w-full px-2 py-1.5 rounded border border-slate-300 text-sm" />
+      {err && <div className="text-xs text-red-600">{err}</div>}
+      <div className="flex gap-2">
+        <button onClick={onConfirm} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg bg-slate-700 text-white font-medium hover:bg-slate-800 disabled:opacity-50">{busy ? 'Saving…' : '🗑️ Confirm dead reading'}</button>
+        <button onClick={onCancel} disabled={busy} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 disabled:opacity-50">Cancel</button>
       </div>
     </div>
   );

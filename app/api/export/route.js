@@ -1,6 +1,7 @@
 import { fetchSubmissions } from '@/lib/kobo';
 import { filterSubmissionsForUser, applyUrlFilters } from '@/lib/filter';
 import { detectFlagsScoped } from '@/lib/flagContext';
+import { getVerifiedIds } from '@/lib/db';
 import { toCsv, toJson, toLabeledRows, buildSummary } from '@/lib/export';
 
 // Which subset each tab exports, and a friendly sheet/file name for it.
@@ -32,9 +33,13 @@ export async function GET(request) {
     const raw = live.filter((s) => !s._correction);
 
     // Red flags on the live set, so the Red-flags sheet lists WHY each row fired.
+    // A reading an admin marked "correct" (verified) is treated as clean here,
+    // exactly like the Submissions page, so the two never disagree.
     const flags = await detectFlagsScoped(live);
-    const flagged = live.filter((s) => flags[s._id]);
-    const clean = live.filter((s) => !flags[s._id]);
+    const verified = await getVerifiedIds().catch(() => new Set());
+    const isRed = (s) => !!flags[s._id] && !verified.has(String(s._id));
+    const flagged = live.filter(isRed);
+    const clean = live.filter((s) => !isRed(s));
 
     const sortByTime = (arr) => [...arr].sort((a, b) => new Date(b._submission_time) - new Date(a._submission_time));
     const scopeSets = { all: live, raw, corrected, clean, flagged, dead };
@@ -55,8 +60,8 @@ export async function GET(request) {
 
     if (format === 'xlsx') {
       // Real Excel workbook. "Download all" (scope=all) => a Summary sheet plus
-      // one sheet each for All readings, Corrected, Dead and Red flags. A single
-      // tab (e.g. Dead or Corrected) => just that data + a Summary sheet.
+      // one sheet each for All readings, Clean, Corrected, Dead and Red flags. A
+      // single tab (e.g. Dead or Clean) => just that data + a Summary sheet.
       const XLSX = await import('xlsx');
       const wb = XLSX.utils.book_new();
 
@@ -89,6 +94,7 @@ export async function GET(request) {
       if (scope === 'all') {
         addSummarySheet(live);
         addDataSheet('All readings', sortByTime(live));
+        addDataSheet('Clean', sortByTime(clean));
         addDataSheet('Corrected', sortByTime(corrected));
         addDataSheet('Dead', sortByTime(dead));
         addDataSheet('Red flags', sortByTime(flagged), flagCol);
