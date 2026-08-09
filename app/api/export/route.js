@@ -1,6 +1,7 @@
 import { fetchSubmissions } from '@/lib/kobo';
 import { filterSubmissionsForUser, applyUrlFilters } from '@/lib/filter';
 import { detectFlagsScoped } from '@/lib/flagContext';
+import { sameDayDuplicates } from '@/lib/redflags';
 import { getVerifiedIds } from '@/lib/db';
 import { toCsv, toJson, toLabeledRows, buildSummary } from '@/lib/export';
 
@@ -12,6 +13,7 @@ const SCOPE_LABEL = {
   clean: 'Clean',
   flagged: 'Red flags',
   dead: 'Dead',
+  duplicates: 'Duplicates',
 };
 
 export async function GET(request) {
@@ -41,8 +43,12 @@ export async function GET(request) {
     const flagged = live.filter(isRed);
     const clean = live.filter((s) => !isRed(s));
 
+    // Same-day duplicate readings (same pipe read twice+ on one date).
+    const dupIds = sameDayDuplicates(live).ids;
+    const duplicates = live.filter((s) => dupIds.has(String(s._id)));
+
     const sortByTime = (arr) => [...arr].sort((a, b) => new Date(b._submission_time) - new Date(a._submission_time));
-    const scopeSets = { all: live, raw, corrected, clean, flagged, dead };
+    const scopeSets = { all: live, raw, corrected, clean, flagged, dead, duplicates };
     const selected = sortByTime(scopeSets[scope] || live);
 
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

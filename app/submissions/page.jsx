@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { readingDate } from '@/lib/weekly';
 import { fetchSubmissions } from '@/lib/kobo';
 import { detectFlagsScoped } from '@/lib/flagContext';
+import { sameDayDuplicates } from '@/lib/redflags';
 import { getSettings, getVerifiedIds } from '@/lib/db';
 import { filterSubmissionsForUser, applyUrlFilters } from '@/lib/filter';
 import { getCurrentUser } from '@/lib/auth';
@@ -58,6 +59,13 @@ export default async function SubmissionsPage({ searchParams }) {
   const rawCount = filtered0.filter(isRaw).length;
   const correctedCount = filtered0.filter(isCorrected).length;
   const deadCount = filtered0.filter(isDead).length;
+
+  // Same-day duplicates: the same pipe read more than once on one date. Surfaced
+  // for everyone (admins) independent of the red-flag toggle, so both forms can
+  // be compared and one corrected/deleted.
+  const dup = sameDayDuplicates(scopedAll);
+  const isDuplicate = (s) => dup.ids.has(String(s._id));
+  const duplicateCount = isAdmin ? filtered0.filter(isDuplicate).length : 0;
   // "Clean" = the trustworthy dataset: live (not dead) readings with no red
   // flag. Correcting a flagged reading clears its flag, so your fixes land
   // here — this is the most-accurate data to work from.
@@ -70,6 +78,7 @@ export default async function SubmissionsPage({ searchParams }) {
     if (isDead(s)) return false;
     if (flagFilter === 'raw') return isRaw(s);
     if (flagFilter === 'corrected' || flagFilter === 'fixed') return isCorrected(s);
+    if (flagFilter === 'duplicates') return isDuplicate(s);
     if (!canSeeFlags) return true;
     if (flagFilter === 'flagged') return isRed(s._id);
     if (flagFilter === 'clean') return !isRed(s._id);
@@ -115,6 +124,7 @@ export default async function SubmissionsPage({ searchParams }) {
                 <FlagChip name="raw" current={flagFilter} sp={sp}>🗂️ Raw ({rawCount})</FlagChip>
                 <FlagChip name="corrected" current={flagFilter} sp={sp}>✎ Corrected ({correctedCount})</FlagChip>
                 <FlagChip name="clean" current={flagFilter} sp={sp}>✓ Clean ({cleanCount})</FlagChip>
+                {duplicateCount > 0 && <FlagChip name="duplicates" current={flagFilter} sp={sp}>👯 Duplicates ({duplicateCount})</FlagChip>}
                 <FlagChip name="dead" current={flagFilter} sp={sp}>🗑️ Dead ({deadCount})</FlagChip>
                 <FlagChip name="flagged" current={flagFilter} sp={sp} danger>🚩 Flagged ({redCount})</FlagChip>
               </>
@@ -134,6 +144,7 @@ export default async function SubmissionsPage({ searchParams }) {
         allSubmissions={scopedAll}
         canVerify={isAdmin}
         verifiedIds={canSeeFlags ? Array.from(verifiedIds) : []}
+        duplicates={isAdmin ? dup.map : {}}
       />
     </div>
   );

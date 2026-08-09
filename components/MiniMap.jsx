@@ -31,7 +31,7 @@ function loadLeaflet() {
   });
 }
 
-export default function MiniMap({ lat, lng, label = '', me = null }) {
+export default function MiniMap({ lat, lng, label = '', me = null, route = null }) {
   const ref = useRef(null);
   const mapRef = useRef(null);
   const meLayerRef = useRef(null);
@@ -73,7 +73,10 @@ export default function MiniMap({ lat, lng, label = '', me = null }) {
     };
   }, [lat, lng, label]);
 
-  // ---- Add / update the "you are here" marker whenever `me` changes. ----
+  // ---- Add / update the "you are here" marker + the route line whenever the
+  // user's position or the road route changes. If a road `route` (array of
+  // [lat,lng] following the streets) is supplied, we draw that; otherwise a
+  // dashed straight line as a fallback. ----
   useEffect(() => {
     const map = mapRef.current;
     const L = typeof window !== 'undefined' ? window.L : null;
@@ -83,12 +86,19 @@ export default function MiniMap({ lat, lng, label = '', me = null }) {
     const group = L.layerGroup();
     L.circleMarker([me.lat, me.lng], { radius: 8, color: '#1d4ed8', weight: 3, fillColor: '#3b82f6', fillOpacity: 0.9 })
       .bindPopup('📍 You are here').addTo(group);
-    L.polyline([[lat, lng], [me.lat, me.lng]], { color: '#1d4ed8', weight: 2, dashArray: '5 5', opacity: 0.8 }).addTo(group);
+    const hasRoute = Array.isArray(route) && route.length >= 2;
+    if (hasRoute) {
+      L.polyline(route, { color: '#1d4ed8', weight: 4, opacity: 0.85 }).addTo(group); // follows the roads
+    } else {
+      L.polyline([[lat, lng], [me.lat, me.lng]], { color: '#1d4ed8', weight: 2, dashArray: '5 5', opacity: 0.8 }).addTo(group);
+    }
     group.addTo(map);
     meLayerRef.current = group;
-    try { map.fitBounds(L.latLngBounds([[lat, lng], [me.lat, me.lng]]).pad(0.35)); } catch {}
+    const bounds = hasRoute ? L.latLngBounds(route) : L.latLngBounds([[lat, lng], [me.lat, me.lng]]);
+    bounds.extend([lat, lng]); bounds.extend([me.lat, me.lng]);
+    try { map.fitBounds(bounds.pad(0.2)); } catch {}
     setTimeout(() => map.invalidateSize(), 100);
-  }, [me, ready, lat, lng]);
+  }, [me, route, ready, lat, lng]);
 
   if (lat == null || lng == null) return null;
   return <div ref={ref} className="w-full h-44 rounded-lg border border-slate-200 overflow-hidden" />;

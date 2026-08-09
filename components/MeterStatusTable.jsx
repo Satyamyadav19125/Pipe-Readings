@@ -156,19 +156,22 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
             {v.shownMeters.map((m) => {
               const st = STATUS[m.status];
               return (
-                <li key={m.serial} className={`px-4 py-2.5 ${st.row}`}>
-                  <div className="flex items-center gap-3">
-                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${st.dot}`} />
+                <li key={m.serial} className={`px-3 sm:px-4 py-2.5 ${st.row}`}>
+                  {/* Wraps on phones: the info takes the first line at full width
+                      (so the farm ID is never squeezed off), the actions drop to
+                      their own line below. Stays on one line from `sm` up. */}
+                  <div className="flex items-start gap-2.5 flex-wrap">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 ${st.dot}`} />
                     <div className="min-w-0 flex-1">
-                      <div className="font-mono text-sm truncate">{m.serial}</div>
-                      {m.farm && <div className="text-[10px] text-slate-400 font-mono truncate">🌾 {m.farm}</div>}
-                      <div className="text-[11px] text-slate-500 truncate">
+                      <div className="font-mono text-sm break-all">{m.serial}</div>
+                      {m.farm && <div className="text-[11px] text-slate-500 font-mono break-all">🌾 {m.farm}</div>}
+                      <div className="text-[11px] text-slate-500">
                         {m.lastDate
                           ? <>last: {m.lastReading ?? '—'} · {new Date(m.lastDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}{m.lastSurveyor ? ` · ${m.lastSurveyor}` : ''}</>
                           : 'no readings yet'}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto sm:shrink-0">
                       <button onClick={() => setOpenCheat((o) => ({ ...o, [m.serial]: !o[m.serial] }))}
                         className="text-[11px] px-2 py-1 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-100"
                         title="Show farm ID, GPS and a mini map for this pipe">
@@ -243,20 +246,44 @@ function haversineM(a, b) {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
+function fmtDist(m) {
+  if (m == null) return '';
+  return m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`;
+}
 function PipeDetailMap({ lat, lng, serial }) {
-  const [state, setState] = useState('idle'); // idle | locating | done | error
-  const [dist, setDist] = useState(null);
+  const [state, setState] = useState('idle'); // idle | locating | routing | done | error
+  const [dist, setDist] = useState(null);      // straight-line metres
+  const [roadDist, setRoadDist] = useState(null); // along-road metres (OSRM)
+  const [route, setRoute] = useState(null);    // [[lat,lng], ...] following roads
   const [me, setMe] = useState(null);
   const [err, setErr] = useState('');
 
+  // Ask OpenStreetMap's free routing service (no API key) for a driving route
+  // that follows the roads, so the line + distance aren't "as the crow flies".
+  async function fetchRoad(here) {
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${here.lng},${here.lat};${lng},${lat}?overview=full&geometries=geojson`;
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const d = await res.json();
+      const r = d?.routes?.[0];
+      if (r?.geometry?.coordinates?.length) {
+        setRoute(r.geometry.coordinates.map(([lo, la]) => [la, lo])); // geojson is [lng,lat]
+        if (Number.isFinite(r.distance)) setRoadDist(r.distance);
+      }
+    } catch { /* keep the straight-line fallback */ }
+  }
+
   function howFar() {
-    setErr(''); setState('locating');
+    setErr(''); setState('locating'); setRoute(null); setRoadDist(null);
     if (!('geolocation' in navigator)) { setErr('This device can’t share location.'); setState('error'); return; }
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setMe(here);
         setDist(haversineM(here, { lat, lng }));
+        setState('routing');
+        await fetchRoad(here);
         setState('done');
       },
       (geoErr) => {
@@ -266,22 +293,30 @@ function PipeDetailMap({ lat, lng, serial }) {
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     );
   }
-  const pretty = dist == null ? '' : dist >= 1000 ? `${(dist / 1000).toFixed(2)} km` : `${Math.round(dist)} m`;
+  const gmaps = me
+    ? `https://www.google.com/maps/dir/?api=1&origin=${me.lat},${me.lng}&destination=${lat},${lng}&travelmode=driving`
+    : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 
   return (
     <div className="pt-1.5 space-y-1.5">
       <div className="text-[10px] text-slate-400">
-        📍 Where this pipe is (most-common reading location){me ? ' · 🔵 = you' : ''}:
+        📍 Where this pipe is (most-common reading location){me ? ' · 🔵 = you, line follows the roads' : ''}:
       </div>
-      <MiniMap lat={lat} lng={lng} label={serial} me={me} />
+      <MiniMap lat={lat} lng={lng} label={serial} me={me} route={route} />
       <div className="flex items-center gap-2 flex-wrap">
-        <button type="button" onClick={howFar} disabled={state === 'locating'}
+        <button type="button" onClick={howFar} disabled={state === 'locating' || state === 'routing'}
           className="text-[11px] px-2.5 py-1 rounded-full bg-brand-600 text-white font-medium hover:bg-brand-700 disabled:opacity-50">
-          {state === 'locating' ? 'Locating…' : me ? '📍 Update my location' : '📍 How far am I?'}
+          {state === 'locating' ? 'Locating…' : state === 'routing' ? 'Finding road…' : me ? '📍 Update my location' : '📍 How far am I?'}
         </button>
-        {state === 'done' && <span className="text-[11px] text-slate-700 font-medium">You are <b>{pretty}</b> from this pipe (blue dot on the map).</span>}
-        <a target="_blank" rel="noreferrer" href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`}
-          className="text-[11px] px-2.5 py-1 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-100">🧭 Directions</a>
+        {state === 'done' && (
+          <span className="text-[11px] text-slate-700 font-medium">
+            {roadDist != null
+              ? <>By road: <b>{fmtDist(roadDist)}</b> <span className="text-slate-400">(straight line {fmtDist(dist)})</span></>
+              : <>You are <b>{fmtDist(dist)}</b> away (straight line — road route unavailable).</>}
+          </span>
+        )}
+        <a target="_blank" rel="noreferrer" href={gmaps}
+          className="text-[11px] px-2.5 py-1 rounded-full bg-field-600 text-white font-medium hover:bg-field-700">🧭 Directions in Google Maps</a>
       </div>
       {state === 'error' && <div className="text-[11px] text-red-600">{err}</div>}
     </div>

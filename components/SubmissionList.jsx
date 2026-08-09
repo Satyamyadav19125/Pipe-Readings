@@ -26,7 +26,7 @@ const DETAIL_SKIP_SEGMENTS = new Set([
   'village', 'village_name', 'q2', 'farm', 'farm_id', 'pipes', 'pipe', 'pipe_id', 'serial', 'meter_id',
 ]);
 
-export default function SubmissionList({ submissions, flags, allSubmissions, canVerify = false, verifiedIds = [] }) {
+export default function SubmissionList({ submissions, flags, allSubmissions, canVerify = false, verifiedIds = [], duplicates = {} }) {
   const [openId, setOpenId] = useState(null);
   const [verified, setVerified] = useState(() => new Set(verifiedIds.map(String)));
   const [busyId, setBusyId] = useState(null);
@@ -74,6 +74,7 @@ export default function SubmissionList({ submissions, flags, allSubmissions, can
             onToggleVerify={toggleVerify}
             onToggle={() => setOpenId(isOpen ? null : s._id)}
             byId={byId}
+            dupOthers={duplicates[s._id] || null}
           />
         );
       })}
@@ -81,7 +82,7 @@ export default function SubmissionList({ submissions, flags, allSubmissions, can
   );
 }
 
-function SubmissionCard({ submission, isOpen, flag, isVerified, canVerify, busy, onToggleVerify, onToggle, byId }) {
+function SubmissionCard({ submission, isOpen, flag, isVerified, canVerify, busy, onToggleVerify, onToggle, byId, dupOthers }) {
   const s = submission;
   const village = getField(s, 'village');
   const serial = getField(s, 'serial');
@@ -91,6 +92,7 @@ function SubmissionCard({ submission, isOpen, flag, isVerified, canVerify, busy,
   const showRed = flag && !isVerified;
   const corr = s._correction || null;
   const isDead = corr && corr.field === 'dead';
+  const dupCount = Array.isArray(dupOthers) ? dupOthers.length : 0;
   const cardClass = isDead ? 'bg-slate-100 border-slate-300 opacity-75'
     : showRed ? 'bg-red-50 border-red-200' : isVerified && flag ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200';
 
@@ -103,6 +105,7 @@ function SubmissionCard({ submission, isOpen, flag, isVerified, canVerify, busy,
             {!isDead && showRed && <span className="text-red-600">🚩</span>}
             {!isDead && corr && <span title="Reading corrected">✎</span>}
             {isVerified && flag && <span className="text-emerald-600" title="Marked correct by admin">✓</span>}
+            {dupCount > 0 && <span title={`This pipe was read ${dupCount + 1}× on this date — open to compare`}>👯</span>}
             <span className={`font-medium truncate ${isDead ? 'line-through text-slate-500' : ''}`}>{village || '—'}</span>
             {surveyor && <span className="text-xs text-slate-500 truncate">· {surveyor}</span>}
           </div>
@@ -123,19 +126,30 @@ function SubmissionCard({ submission, isOpen, flag, isVerified, canVerify, busy,
       {isOpen && (
         <SubmissionDetail
           submission={s} flag={flag} isVerified={isVerified} canVerify={canVerify}
-          busy={busy} onToggleVerify={onToggleVerify} byId={byId}
+          busy={busy} onToggleVerify={onToggleVerify} byId={byId} dupOthers={dupOthers}
         />
       )}
     </div>
   );
 }
 
-function SubmissionDetail({ submission, flag, isVerified, canVerify, busy, onToggleVerify, byId }) {
-  const compareTarget = flag?.flags.find((f) => f.previousSubmissionId)?.previousSubmissionId;
+function SubmissionDetail({ submission, flag, isVerified, canVerify, busy, onToggleVerify, byId, dupOthers }) {
+  // Show the side-by-side comparison whenever a duplicate partner exists —
+  // either flagged (rollback/huge-jump/duplicate) or detected as a same-day
+  // duplicate, so both forms are always reviewable even with flags turned off.
+  const flagTarget = flag?.flags.find((f) => f.previousSubmissionId)?.previousSubmissionId;
+  const dupTarget = Array.isArray(dupOthers) && dupOthers.length ? dupOthers[0] : null;
+  const compareTarget = flagTarget || dupTarget;
   const previous = compareTarget ? byId[compareTarget] : null;
+  const isSameDayDup = !flagTarget && !!previous;
 
   return (
     <div className="border-t border-slate-200/60 p-3 sm:p-4 space-y-4">
+      {isSameDayDup && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-indigo-900 text-sm">
+          <span className="font-semibold">👯 Read more than once on this date.</span> Both forms are shown below — decide which is correct, then correct the value or mark the mistaken one as dead.
+        </div>
+      )}
       {flag && isVerified && (
         <div className="bg-emerald-100 border border-emerald-300 rounded-lg p-3 text-emerald-900">
           <div className="font-semibold mb-1 flex items-center gap-2">✓ Marked correct by admin</div>
