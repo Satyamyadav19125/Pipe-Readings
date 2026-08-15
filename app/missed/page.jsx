@@ -13,6 +13,7 @@ export default function MissedPage() {
   const [week, setWeek] = useState('this'); // 'this' = current period status, 'last' = past periods
   const [periodDays, setPeriodDays] = useState(7);
   const [periodLabel, setPeriodLabel] = useState('week');
+  const [cycleDays, setCycleDays] = useState(0); // 0 = use the settings default; 7/14/21 override
 
   useEffect(() => {
     fetch('/api/auth/check').then((r) => r.json()).then((d) => setUser(d.user || null)).catch(() => setUser(null));
@@ -40,6 +41,18 @@ export default function MissedPage() {
         </p>
       </div>
 
+      {/* Reading cycle selector — 1 / 2 / 3 weeks (or the settings default). */}
+      <div className="bg-white rounded-xl shadow-sm p-3 flex items-center gap-2 flex-wrap">
+        <label className="text-xs font-medium text-slate-600">🔁 Reading cycle:</label>
+        <div className="flex gap-1.5 flex-wrap">
+          <QuickBtn active={cycleDays === 0} onClick={() => setCycleDays(0)}>Default ({periodDays}d)</QuickBtn>
+          <QuickBtn active={cycleDays === 7} onClick={() => setCycleDays(7)}>1 week</QuickBtn>
+          <QuickBtn active={cycleDays === 14} onClick={() => setCycleDays(14)}>2 weeks</QuickBtn>
+          <QuickBtn active={cycleDays === 21} onClick={() => setCycleDays(21)}>3 weeks</QuickBtn>
+        </div>
+        <span className="text-[11px] text-slate-400 w-full sm:w-auto">Changes how long a pipe has to hit its target before it counts as missed.</span>
+      </div>
+
       <div className="bg-white rounded-xl shadow-sm p-3 flex items-center gap-2 flex-wrap">
         <label className="text-xs font-medium text-slate-600">📅 Show {periodLabel} of:</label>
         <input type="date" value={date} max={isoDaysAgo(0)} onChange={(e) => { setWeek('last'); setDate(e.target.value); }}
@@ -52,7 +65,7 @@ export default function MissedPage() {
         </div>
       </div>
 
-      <MeterStatusTable week={week} date={week === 'this' ? '' : date} />
+      <MeterStatusTable week={week} date={week === 'this' ? '' : date} days={cycleDays} />
     </div>
   );
 }

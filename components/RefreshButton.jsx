@@ -1,10 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 // Sits in the top nav next to the theme toggle. Tapping it busts the
-// 30-second Kobo cache and re-renders the current page with fresh data.
+// Kobo cache and hard-reloads the current page with fresh data.
 //
 // Visual feedback states:
 //   idle  → 🔄  (default)
@@ -12,26 +11,18 @@ import { useRouter } from 'next/navigation';
 //   done  → ✓   (1.5s flash, then back to idle)
 //   error → ⚠   (2s flash, then back to idle)
 export default function RefreshButton() {
-  const router = useRouter();
   const [state, setState] = useState('idle');
 
   async function handleClick() {
     if (state === 'busy') return;
     setState('busy');
     try {
-      const res = await fetch('/api/refresh', { method: 'POST' });
+      const res = await fetch('/api/refresh', { method: 'POST', cache: 'no-store' });
       if (!res.ok) throw new Error('refresh failed');
-      // Refresh server components — the busted Kobo cache means the next
-      // fetch inside fetchSubmissions() will go to Kobo fresh.
-      router.refresh();
-      // Give the server a moment to re-render with fresh Kobo data, then do a
-      // second refresh so the swapped-in HTML is definitely the new data.
-      setTimeout(() => router.refresh(), 800);
-      // Brief delay so the user actually sees the spinner.
-      setTimeout(() => {
-        setState('done');
-        setTimeout(() => setState('idle'), 1500);
-      }, 500);
+      // The soft router.refresh() sometimes swapped in only part of the tree,
+      // so refresh felt like it "didn't work". A hard reload AFTER the cache is
+      // busted guarantees every page re-fetches fresh Kobo data.
+      window.location.reload();
     } catch {
       setState('error');
       setTimeout(() => setState('idle'), 2000);

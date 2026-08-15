@@ -53,8 +53,14 @@ export async function GET(request) {
   }
 
   const target = Math.max(1, Number(settings?.reading?.target) || 2);
-  const periodDays = Math.max(1, Number(settings?.reading?.periodDays) || 7);
-  const periodLabel = String(settings?.reading?.periodLabel || 'week');
+  let periodDays = Math.max(1, Number(settings?.reading?.periodDays) || 7);
+  let periodLabel = String(settings?.reading?.periodLabel || 'week');
+  // Optional cycle override from the Assignment tab's 1/2/3-week selector.
+  const daysParam = Number(searchParams.get('days'));
+  if (Number.isFinite(daysParam) && daysParam > 0) {
+    periodDays = daysParam;
+    periodLabel = daysParam % 7 === 0 ? `${daysParam / 7}-week` : `${daysParam}-day`;
+  }
 
   let allowed = null;
   if (user.role === 'user') {
@@ -99,7 +105,7 @@ export async function GET(request) {
       // Turned-off farms/pipes must never show up as pending readings.
       if (offFarms.has(lcv(pm.farm)) || offPipes.has(lcv(pm.serial))) continue;
       const key = `${village}|||${pm.serial}`;
-      meters[key] = { serial: pm.serial, farm: pm.farm || null, village, countThisPeriod: 0, lastReading: null, lastDate: null, lastSurveyor: null, lastTs: 0, locs: [] };
+      meters[key] = { serial: pm.serial, farm: pm.farm || null, village, countThisPeriod: 0, lastReading: null, lastDate: null, lastSurveyor: null, lastTs: 0, locs: [], history: [] };
     }
   }
 
@@ -113,7 +119,7 @@ export async function GET(request) {
 
     const key = `${village}|||${serial}`;
     if (!meters[key]) {
-      meters[key] = { serial, farm: getField(s, 'farm') || null, village, countThisPeriod: 0, lastReading: null, lastDate: null, lastSurveyor: null, lastTs: 0, locs: [] };
+      meters[key] = { serial, farm: getField(s, 'farm') || null, village, countThisPeriod: 0, lastReading: null, lastDate: null, lastSurveyor: null, lastTs: 0, locs: [], history: [] };
     }
     const m = meters[key];
     if (!m.farm) m.farm = getField(s, 'farm') || null;
@@ -121,6 +127,10 @@ export async function GET(request) {
     if (loc) m.locs.push(loc);
 
     const rt = readingDate(s).getTime();
+    if (!Number.isNaN(rt)) {
+      const hr = parseReading(getField(s, 'endReading'));
+      m.history.push({ t: rt, reading: Number.isNaN(hr) ? null : hr, surveyor: getField(s, 'surveyor') || null });
+    }
     if (!Number.isNaN(rt) && rt >= periodStart.getTime() && rt < periodEnd.getTime()) {
       m.countThisPeriod += 1;
     }
@@ -149,7 +159,16 @@ export async function GET(request) {
       lat = median(m.locs.map((l) => l.lat));
       lng = median(m.locs.map((l) => l.lng));
     }
-    const row = { serial: m.serial, farm: m.farm, countThisPeriod: m.countThisPeriod, status, lastReading: m.lastReading, lastDate: m.lastDate, lastSurveyor: m.lastSurveyor, refLoc: rl ? `${rl.lat}, ${rl.lng}` : null, lat, lng };
+    // Timeline of when this pipe was actually read (form dates), with the gap in
+    // days between consecutive readings — powers the reading-timeline chart.
+    const hist = m.history.sort((a, b) => a.t - b.t);
+    let prevT = null;
+    const history = hist.map((h) => {
+      const gapDays = prevT == null ? null : Math.round((h.t - prevT) / 86400000);
+      prevT = h.t;
+      return { date: new Date(h.t).toISOString().slice(0, 10), reading: h.reading, surveyor: h.surveyor, gapDays };
+    }).slice(-24); // keep it light: the most recent 24 readings
+    const row = { serial: m.serial, farm: m.farm, countThisPeriod: m.countThisPeriod, status, lastReading: m.lastReading, lastDate: m.lastDate, lastSurveyor: m.lastSurveyor, refLoc: rl ? `${rl.lat}, ${rl.lng}` : null, lat, lng, history };
     if (!byVillage[m.village]) byVillage[m.village] = [];
     byVillage[m.village].push(row);
   }

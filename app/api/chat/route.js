@@ -12,6 +12,7 @@ export const dynamic = 'force-dynamic';
 //   'dm:<name>'    -> any admin, OR the assistant whose name === <name>
 function canAccess(user, channel) {
   if (!channel) return false;
+  if (user.role === 'guest') return false; // guests have no chat access
   if (channel === 'group') return true;
   if (channel.startsWith('dm:')) {
     const who = channel.slice(3);

@@ -24,23 +24,35 @@ export default function MobileNav({ user, formUploadUrl }) {
   const pathname = usePathname();
 
   const isAdmin = user?.role === 'admin';
+  const isGuest = user?.role === 'guest';
   const loggedIn = !!user;
   const badge = user?.name || (isAdmin ? 'Admin' : '');
 
-  const links = loggedIn
-    ? (isAdmin
+  // Guest (read-only viewer): only the sections the admin allowed, and NONE of
+  // the admin/personal tools (Settings, Debug, Kobo View, Chat, profile).
+  const guestShow = user?.show || {};
+  const guestLinks = [
+    { href: '/', label: 'Overview', icon: '🏠', k: 'overview' },
+    { href: '/submissions', label: 'Submissions', icon: '📋', k: 'submissions' },
+    { href: '/usage', label: 'Water level', icon: '💧', k: 'usage' },
+    { href: '/map', label: 'Map', icon: '🗺️', k: 'map' },
+    { href: '/team', label: 'Assignment', icon: '👥', k: 'assignment' },
+  ].filter((l) => guestShow[l.k] !== false);
+
+  const links = !loggedIn ? []
+    : isGuest ? guestLinks
+    : (isAdmin
         ? [...baseLinks,
             { href: '/kobo-view', label: 'Kobo View', icon: '🪞' },
             { href: '/settings', label: 'Settings', icon: '⚙️' },
             { href: '/profile', label: 'My profile', icon: '👤' },
             { href: '/debug', label: 'Debug', icon: '🔧' }]
-        : [...baseLinks, { href: '/profile', label: 'My profile', icon: '👤' }])
-    : [];
+        : [...baseLinks, { href: '/profile', label: 'My profile', icon: '👤' }]);
 
   // Poll chat unread count for the badge on the Chat tab; fire a browser
   // notification when NEW messages arrive while the user is elsewhere.
   useEffect(() => {
-    if (!loggedIn) return;
+    if (!loggedIn || isGuest) return; // guests have no chat
     let stop = false;
     async function poll() {
       try {
@@ -94,7 +106,7 @@ export default function MobileNav({ user, formUploadUrl }) {
             </nav>
           )}
 
-          {loggedIn && formUploadUrl && (
+          {loggedIn && !isGuest && formUploadUrl && (
             <a href={formUploadUrl} target="_blank" rel="noreferrer" title="Open the Kobo form to submit a new reading" className="hidden sm:inline-flex items-center gap-1 bg-field-500 hover:bg-field-600 px-3 py-1.5 rounded text-sm font-medium shadow">
               ➕ <span className="hidden md:inline">New reading</span>
             </a>
@@ -105,13 +117,19 @@ export default function MobileNav({ user, formUploadUrl }) {
 
           {loggedIn ? (
             <>
-              <Link href="/profile" title="Open my profile"
-                className="px-3 py-1.5 rounded bg-white/15 hover:bg-white/25 text-sm font-medium flex items-center gap-1.5 transition max-w-[120px]">
-                {user?.photo
-                  ? <img src={user.photo} alt="" className="w-5 h-5 rounded-full object-cover border border-white/50" />
-                  : <span>👤</span>}
-                <span className="hidden sm:inline truncate">{badge}</span>
-              </Link>
+              {isGuest ? (
+                <span className="px-3 py-1.5 rounded bg-white/15 text-sm font-medium flex items-center gap-1.5 max-w-[140px]">
+                  <span>👁️</span><span className="hidden sm:inline truncate">Guest viewer</span>
+                </span>
+              ) : (
+                <Link href="/profile" title="Open my profile"
+                  className="px-3 py-1.5 rounded bg-white/15 hover:bg-white/25 text-sm font-medium flex items-center gap-1.5 transition max-w-[120px]">
+                  {user?.photo
+                    ? <img src={user.photo} alt="" className="w-5 h-5 rounded-full object-cover border border-white/50" />
+                    : <span>👤</span>}
+                  <span className="hidden sm:inline truncate">{badge}</span>
+                </Link>
+              )}
               <button onClick={doLogout} title="Log out"
                 className="p-2 rounded hover:bg-red-500/40 text-sm transition" aria-label="Log out">⏻</button>
             </>
@@ -134,24 +152,34 @@ export default function MobileNav({ user, formUploadUrl }) {
       {open && loggedIn && (
         <div className="xl:hidden fixed inset-0 z-[1100] bg-black/40" onClick={() => setOpen(false)}>
           <div className="absolute top-14 right-0 w-72 bg-white shadow-xl rounded-bl-2xl overflow-hidden max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <Link href="/profile" onClick={() => setOpen(false)} className="px-4 py-3 bg-gradient-to-r from-brand-50 to-field-50 text-brand-900 text-sm border-b flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {user?.photo ? (
-                  <img src={user.photo} alt="" className="w-8 h-8 rounded-full object-cover border border-white" />
-                ) : (
-                  <span className="w-8 h-8 rounded-full bg-brand-200 flex items-center justify-center text-base">
-                    {isAdmin ? '👑' : '👤'}
-                  </span>
-                )}
+            {isGuest ? (
+              <div className="px-4 py-3 bg-gradient-to-r from-brand-50 to-field-50 text-brand-900 text-sm border-b flex items-center gap-2">
+                <span className="w-8 h-8 rounded-full bg-brand-200 flex items-center justify-center text-base">👁️</span>
                 <div>
-                  <div className="font-semibold leading-tight">{badge}</div>
-                  <div className="text-[10px] text-slate-500">{isAdmin ? 'Administrator · tap for profile' : 'Surveyor · tap for profile'}</div>
+                  <div className="font-semibold leading-tight">Guest viewer</div>
+                  <div className="text-[10px] text-slate-500">Read-only demo access</div>
                 </div>
               </div>
-              <span className="text-slate-400">›</span>
-            </Link>
+            ) : (
+              <Link href="/profile" onClick={() => setOpen(false)} className="px-4 py-3 bg-gradient-to-r from-brand-50 to-field-50 text-brand-900 text-sm border-b flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {user?.photo ? (
+                    <img src={user.photo} alt="" className="w-8 h-8 rounded-full object-cover border border-white" />
+                  ) : (
+                    <span className="w-8 h-8 rounded-full bg-brand-200 flex items-center justify-center text-base">
+                      {isAdmin ? '👑' : '👤'}
+                    </span>
+                  )}
+                  <div>
+                    <div className="font-semibold leading-tight">{badge}</div>
+                    <div className="text-[10px] text-slate-500">{isAdmin ? 'Administrator · tap for profile' : 'Surveyor · tap for profile'}</div>
+                  </div>
+                </div>
+                <span className="text-slate-400">›</span>
+              </Link>
+            )}
 
-            {formUploadUrl && (
+            {!isGuest && formUploadUrl && (
               <a href={formUploadUrl} target="_blank" rel="noreferrer" className="px-4 py-3 bg-field-50 text-field-900 font-medium border-b border-slate-100 flex items-center gap-3">
                 <span className="text-lg">➕</span>
                 <span>New reading (Kobo form)</span>

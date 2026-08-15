@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { getField } from '@/lib/fieldMap';
 import Lightbox from '@/components/Lightbox';
 import MiniMap from '@/components/MiniMap';
@@ -27,6 +28,7 @@ const DETAIL_SKIP_SEGMENTS = new Set([
 ]);
 
 export default function SubmissionList({ submissions, flags, allSubmissions, canVerify = false, verifiedIds = [], duplicates = {} }) {
+  const router = useRouter();
   const [openId, setOpenId] = useState(null);
   const [verified, setVerified] = useState(() => new Set(verifiedIds.map(String)));
   const [busyId, setBusyId] = useState(null);
@@ -47,6 +49,8 @@ export default function SubmissionList({ submissions, flags, allSubmissions, can
           if (makeVerified) next.add(String(id)); else next.delete(String(id));
           return next;
         });
+        // Soft refresh so the Verified / Flagged / Clean tab counts update.
+        router.refresh();
       }
     } catch {}
     finally { setBusyId(null); }
@@ -138,16 +142,19 @@ function SubmissionDetail({ submission, flag, isVerified, canVerify, busy, onTog
   // either flagged (rollback/huge-jump/duplicate) or detected as a same-day
   // duplicate, so both forms are always reviewable even with flags turned off.
   const flagTarget = flag?.flags.find((f) => f.previousSubmissionId)?.previousSubmissionId;
-  const dupTarget = Array.isArray(dupOthers) && dupOthers.length ? dupOthers[0] : null;
-  const compareTarget = flagTarget || dupTarget;
-  const previous = compareTarget ? byId[compareTarget] : null;
-  const isSameDayDup = !flagTarget && !!previous;
+  const dupIds = Array.isArray(dupOthers) ? dupOthers : [];
+  // All partners to compare against — the flagged "previous" plus every same-day
+  // duplicate — so 3+ readings on one day are all shown together (N-way).
+  const otherIds = Array.from(new Set([flagTarget, ...dupIds].filter(Boolean)))
+    .filter((id) => String(id) !== String(submission._id));
+  const others = otherIds.map((id) => byId[id]).filter(Boolean);
+  const isSameDayDup = !flagTarget && others.length > 0;
 
   return (
     <div className="border-t border-slate-200/60 p-3 sm:p-4 space-y-4">
       {isSameDayDup && (
         <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-indigo-900 text-sm">
-          <span className="font-semibold">👯 Read more than once on this date.</span> Both forms are shown below — decide which is correct, then correct the value or mark the mistaken one as dead.
+          <span className="font-semibold">👯 Read {others.length + 1} times on this date.</span> All {others.length + 1} forms are shown below — decide which is correct, then correct the value or mark the mistaken one(s) as deleted. A deleted one stays here for reference and the kept one moves to Clean.
         </div>
       )}
       {flag && isVerified && (
@@ -180,8 +187,8 @@ function SubmissionDetail({ submission, flag, isVerified, canVerify, busy, onTog
 
       {canVerify && <ReadingCorrection submission={submission} />}
 
-      {previous ? (
-        <DuplicateCompare current={submission} other={previous} canVerify={canVerify} />
+      {others.length > 0 ? (
+        <DuplicateCompare current={submission} others={others} canVerify={canVerify} />
       ) : (
         <SubmissionPanel label="Form data" submission={submission} />
       )}
@@ -199,15 +206,20 @@ const COMPARE_FIELDS = [
   ['village', 'Village'], ['farm', 'Farm ID'], ['serial', 'Pipe ID'],
   ['validation', 'Outside (mm)'], ['reading', 'Water level (mm)'], ['location', 'GPS'],
 ];
-function DuplicateCompare({ current, other, canVerify }) {
+function DuplicateCompare({ current, others, canVerify }) {
+  const router = useRouter();
   const [busy, setBusy] = useState('');
+  const columns = [current, ...others]; // N-way: this reading + every same-day partner
   const val = (sub, key) => {
     if (key === 'reading') return getField(sub, 'endReading') ?? getField(sub, 'reading') ?? '';
     return getField(sub, key) ?? '';
   };
+  const isDeadSub = (sub) => sub._correction && sub._correction.field === 'dead';
+  const isCorrectedSub = (sub) => sub._correction && sub._correction.field !== 'dead';
+  const nameOf = (i) => (i === 0 ? 'This one' : `Other ${i}`);
   async function markDead(sub) {
-    // Ask for a reason so the dead reading records WHY. Cancel aborts.
-    const note = window.prompt('Why is this reading dead? (add a short note — optional)', '');
+    // Ask for a reason so the deleted reading records WHY. Cancel aborts.
+    const note = window.prompt('Why is this reading a mistake? (short note — optional)', '');
     if (note === null) return;
     setBusy(sub._id);
     try {
@@ -216,30 +228,37 @@ function DuplicateCompare({ current, other, canVerify }) {
         body: JSON.stringify({ submissionId: sub._id, field: 'dead', oldValue: val(sub, 'reading'), note }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Failed');
-      window.location.reload();
+      router.refresh(); // soft update — no full page reload
+      setBusy('');
     } catch (e) { alert(e.message); setBusy(''); }
   }
   return (
     <div className="space-y-2">
-      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">⚖️ Comparison — differences highlighted</div>
+      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">⚖️ Comparison — {columns.length} readings, differences highlighted</div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm border border-slate-200 rounded-lg">
           <thead>
             <tr className="bg-slate-50">
-              <th className="text-left px-2 py-1.5 font-medium text-slate-500">Field</th>
-              <th className="text-left px-2 py-1.5 font-medium">This one <span className="font-mono text-[10px] text-slate-400">#{String(current._id).slice(-5)}</span></th>
-              <th className="text-left px-2 py-1.5 font-medium">The other <span className="font-mono text-[10px] text-slate-400">#{String(other._id).slice(-5)}</span></th>
+              <th className="text-left px-2 py-1.5 font-medium text-slate-500 whitespace-nowrap">Field</th>
+              {columns.map((sub, i) => (
+                <th key={sub._id} className="text-left px-2 py-1.5 font-medium whitespace-nowrap">
+                  {nameOf(i)} <span className="font-mono text-[10px] text-slate-400">#{String(sub._id).slice(-5)}</span>
+                  {isDeadSub(sub) && <span className="ml-1 text-[10px] text-slate-500">🗑️ deleted</span>}
+                  {isCorrectedSub(sub) && <span className="ml-1 text-[10px] text-emerald-600">✎ corrected</span>}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {COMPARE_FIELDS.map(([key, label]) => {
-              const a = String(val(current, key)); const b = String(val(other, key));
-              const diff = a !== b;
+              const vals = columns.map((sub) => String(val(sub, key)));
+              const allSame = vals.every((x) => x === vals[0]);
               return (
-                <tr key={key} className={`border-t border-slate-100 ${diff ? 'bg-amber-50' : ''}`}>
-                  <td className="px-2 py-1 text-slate-500">{label}</td>
-                  <td className={`px-2 py-1 ${diff ? 'font-semibold text-amber-800' : ''}`}>{a || '—'}</td>
-                  <td className={`px-2 py-1 ${diff ? 'font-semibold text-amber-800' : ''}`}>{b || '—'}</td>
+                <tr key={key} className={`border-t border-slate-100 ${allSame ? '' : 'bg-amber-50'}`}>
+                  <td className="px-2 py-1 text-slate-500 whitespace-nowrap">{label}</td>
+                  {vals.map((x, i) => (
+                    <td key={i} className={`px-2 py-1 ${allSame ? '' : 'font-semibold text-amber-800'}`}>{x || '—'}</td>
+                  ))}
                 </tr>
               );
             })}
@@ -248,15 +267,19 @@ function DuplicateCompare({ current, other, canVerify }) {
       </div>
       {canVerify && (
         <div className="flex flex-wrap gap-2 items-center">
-          <span className="text-xs text-slate-500">Which is the mistake?</span>
-          <button onClick={() => markDead(current)} disabled={!!busy}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-700 hover:bg-slate-100 disabled:opacity-50">
-            🗑️ This one is dead
-          </button>
-          <button onClick={() => markDead(other)} disabled={!!busy}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-700 hover:bg-slate-100 disabled:opacity-50">
-            🗑️ The other is dead
-          </button>
+          <span className="text-xs text-slate-500">Mark the mistaken reading(s) as deleted:</span>
+          {columns.map((sub, i) => (
+            isDeadSub(sub) ? (
+              <span key={sub._id} className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-500 border border-slate-200">
+                {nameOf(i)} already deleted
+              </span>
+            ) : (
+              <button key={sub._id} onClick={() => markDead(sub)} disabled={!!busy}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-700 hover:bg-slate-100 disabled:opacity-50">
+                🗑️ {nameOf(i)} is the mistake
+              </button>
+            )
+          ))}
         </div>
       )}
     </div>
@@ -280,6 +303,7 @@ function FullFormEditor({ submission }) {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const router = useRouter();
 
   function currentVal(path, logical) {
     if (path in existing) return existing[path];
@@ -307,7 +331,8 @@ function FullFormEditor({ submission }) {
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.ok) throw new Error(d.error || `Save failed (HTTP ${res.status})`);
-      window.location.reload();
+      router.refresh();
+      setBusy(false); setOpen(false);
     } catch (e) { setErr(e.message); setBusy(false); }
   }
   async function revert() {
@@ -315,7 +340,8 @@ function FullFormEditor({ submission }) {
     try {
       const res = await fetch(`/api/corrections?id=${encodeURIComponent(submission._id)}`, { method: 'DELETE' });
       if (!res.ok) throw new Error((await res.json()).error || 'Failed');
-      window.location.reload();
+      router.refresh();
+      setBusy(false); setOpen(false);
     } catch (e) { setErr(e.message); setBusy(false); }
   }
 
@@ -379,6 +405,7 @@ function ReadingCorrection({ submission }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
+  const router = useRouter();
   async function post(body) {
     setBusy(true); setErr('');
     try {
@@ -389,7 +416,10 @@ function ReadingCorrection({ submission }) {
       let data = {};
       try { data = await res.json(); } catch {}
       if (!res.ok || !data.ok) throw new Error(data.error || `Save failed (HTTP ${res.status})`);
-      window.location.reload();
+      // Soft refresh (no full page reload): the server re-renders with the new
+      // correction overlaid, so this row moves into Corrected/Clean/Deleted.
+      router.refresh();
+      setBusy(false); setMode(null);
     } catch (e) { setErr(e.message); setBusy(false); }
   }
   const saveValue = () => {
@@ -403,7 +433,8 @@ function ReadingCorrection({ submission }) {
     try {
       const res = await fetch(`/api/corrections?id=${encodeURIComponent(submission._id)}`, { method: 'DELETE' });
       if (!res.ok) throw new Error((await res.json()).error || 'Revert failed');
-      window.location.reload();
+      router.refresh();
+      setBusy(false); setMode(null);
     } catch (e) { setErr(e.message); setBusy(false); }
   }
 

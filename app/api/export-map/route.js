@@ -1,6 +1,7 @@
 import { fetchSubmissions } from '@/lib/kobo';
 import { filterSubmissionsForUser, applyUrlFilters } from '@/lib/filter';
 import { getField } from '@/lib/fieldMap';
+import { getCurrentUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -113,6 +114,10 @@ function buildKml(points, ts) {
 
 export async function GET(request) {
   try {
+    const me = await getCurrentUser();
+    if (!me) return new Response('Not logged in', { status: 401 });
+    if (me.role === 'guest') return new Response('Downloads are disabled for guest viewers.', { status: 403 });
+
     const { searchParams } = new URL(request.url);
     const format = (searchParams.get('format') || 'csv').toLowerCase();
 

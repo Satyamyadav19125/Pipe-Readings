@@ -30,9 +30,13 @@ export default async function UsagePage({ searchParams }) {
 
   const currentUser = await getCurrentUser();
   const isAdmin = currentUser?.role === 'admin';
+  const isGuest = currentUser?.role === 'guest';
+  const guestCap = isGuest ? Math.max(1, Number(currentUser?.maxReadings) || 10) : 0;
 
   let scoped = await filterSubmissionsForUser(submissions);
   scoped = scoped.filter((x) => !x._dead);
+  // Guests only see a small sample (no bulk data).
+  if (guestCap) scoped = scoped.slice(0, guestCap);
 
   // Readings marked dead by an admin are mistakes — leave them out.
 
@@ -60,9 +64,11 @@ export default async function UsagePage({ searchParams }) {
           <h2 className="text-xl font-semibold">{isAdmin ? 'Water Level' : 'My Water Level'}</h2>
           <p className="text-sm text-slate-500">Water level at each visit · tap any row to compare two readings</p>
         </div>
-        <Suspense fallback={<div className="h-9 w-24 bg-slate-200 rounded animate-pulse" />}>
-          <ExportButton />
-        </Suspense>
+        {!isGuest && (
+          <Suspense fallback={<div className="h-9 w-24 bg-slate-200 rounded animate-pulse" />}>
+            <ExportButton />
+          </Suspense>
+        )}
       </div>
 
       <Suspense fallback={<div className="h-12 bg-slate-100 rounded-lg animate-pulse" />}>

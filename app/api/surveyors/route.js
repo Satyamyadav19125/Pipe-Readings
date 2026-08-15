@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { fetchSubmissions } from '@/lib/kobo';
 import { getCurrentUser } from '@/lib/auth';
 import { filterSubmissionsForUser } from '@/lib/filter';
+import { getDisabledRegistry } from '@/lib/db';
 import { getField } from '@/lib/fieldMap';
 
 export const dynamic = 'force-dynamic';
@@ -19,6 +20,10 @@ export async function GET() {
   try {
     let subs = await fetchSubmissions();
     subs = await filterSubmissionsForUser(subs);
+    const reg = await getDisabledRegistry();
+    const lc = (x) => String(x || '').trim().toLowerCase();
+    const offFarms = new Set((reg.farms || []).map(lc));
+    const offPipes = new Set((reg.pipes || []).map(lc));
 
     const names = new Set();
     const villages = new Set();
@@ -27,9 +32,11 @@ export async function GET() {
     for (const s of subs) {
       const name = getField(s, 'surveyor');
       const village = getField(s, 'village');
+      // Don't surface villages that belong to a switched-off farm/pipe.
+      const pipeOff = offPipes.has(lc(getField(s, 'serial'))) || offFarms.has(lc(getField(s, 'farm')));
       if (name) names.add(name);
-      if (village) villages.add(village);
-      if (name && village) {
+      if (village && !pipeOff) villages.add(village);
+      if (name && village && !pipeOff) {
         if (!surveyorByVillage[name]) surveyorByVillage[name] = new Set();
         surveyorByVillage[name].add(village);
       }

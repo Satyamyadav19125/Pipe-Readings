@@ -3,6 +3,7 @@ import { fetchSubmissions, fetchFormMaster } from '@/lib/kobo';
 import { computeWeeklyStatus, deriveMeters, daysRemaining } from '@/lib/weekly';
 import { latestPerPipe, irrigationThreshold } from '@/lib/irrigation';
 import { detectFlagsScoped } from '@/lib/flagContext';
+import { sameDayDuplicates } from '@/lib/redflags';
 import { getAssignments, isDbConfigured, getSettings, getMongoHealth, getVerifiedIds, getDisabledRegistry } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { filterSubmissionsForUser, filterAssignmentsForUser } from '@/lib/filter';
@@ -17,6 +18,8 @@ export default async function HomePage() {
   const currentUser = await getCurrentUser();
   if (!currentUser) return <Landing />;
   const isAdmin = currentUser.role === 'admin';
+  const isGuest = currentUser.role === 'guest';
+  const canViewAdmin = isAdmin || isGuest; // guest sees the admin dashboard, read-only
 
   let submissions = [];
   let koboError = null;
@@ -58,7 +61,7 @@ export default async function HomePage() {
   // overview stays positive and focused on the work they've done.
   let flaggedTotal = 0;
   let cleanTotal = submissions.length;
-  if (isAdmin) {
+  if (canViewAdmin) {
     let verifiedIds = new Set();
     try { verifiedIds = await getVerifiedIds(); } catch {}
     const rawFlags = await detectFlagsScoped(submissions, settings);
@@ -67,6 +70,8 @@ export default async function HomePage() {
     flaggedTotal = Object.keys(flags).length;
     cleanTotal = submissions.length - flaggedTotal;
   }
+  // Same-day duplicate readings still needing review (live, unresolved pairs).
+  const duplicateTotal = canViewAdmin ? sameDayDuplicates(liveSubmissions).ids.size : 0;
 
   const villageCounts = {};
   const surveyorCounts = {};
@@ -156,7 +161,9 @@ export default async function HomePage() {
         <div className="min-w-0 flex-1">
           <h2 className="text-lg font-bold">Welcome, {currentUser.name}!</h2>
           <p className="text-sm text-slate-600">
-            {isAdmin
+            {isGuest
+              ? 'Read-only demo view. You can browse the dashboard, but nothing can be changed or downloaded.'
+              : isAdmin
               ? 'Full admin access. Manage assignments, settings, and view all data.'
               : `You're assigned to ${currentUser.villages?.length || 0} village${currentUser.villages?.length === 1 ? '' : 's'}. Thanks for your work!`}
           </p>
@@ -167,14 +174,15 @@ export default async function HomePage() {
         </Link>
       </div>
 
-      {/* KPI grid — admins see 8 (incl. quality stats), surveyors see 4 positive ones */}
-      {isAdmin ? (
+      {/* KPI grid — admins & guests see the full set, surveyors see 4 positive ones */}
+      {canViewAdmin ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
           <Kpi label="Total submissions" value={submissions.length.toLocaleString()} color="bg-brand-50 text-brand-900" icon="📋" />
           <Kpi label="Clean readings" value={cleanTotal.toLocaleString()} color="bg-field-50 text-field-900" icon="✓" />
           <Kpi label="🚩 Flagged" value={flaggedTotal.toLocaleString()} color={flaggedTotal > 0 ? 'bg-red-50 text-red-900' : 'bg-slate-50 text-slate-700'} icon="" />
+          <Kpi label="👯 Duplicate readings" value={duplicateTotal.toLocaleString()} color={duplicateTotal > 0 ? 'bg-indigo-50 text-indigo-900' : 'bg-slate-50 text-slate-700'} icon="" />
           <Kpi label="Quality rate" value={submissions.length > 0 ? `${Math.round((cleanTotal / submissions.length) * 100)}%` : '—'} color="bg-emerald-50 text-emerald-900" icon="📊" />
-          {isAdmin && <Kpi label="🌾 Farms with readings" value={totalFarms.toLocaleString()} color="bg-lime-50 text-lime-900" icon="" />}
+          {canViewAdmin && <Kpi label="🌾 Farms with readings" value={totalFarms.toLocaleString()} color="bg-lime-50 text-lime-900" icon="" />}
           <Kpi label="Villages" value={uniqueVillages} color="bg-amber-50 text-amber-900" icon="🏘️" />
           <Kpi label="Active surveyors" value={uniqueSurveyors} color="bg-violet-50 text-violet-900" icon="👤" />
           <Kpi label={`This ${periodLabel}`} value={`${done}/${pipesTotal} done`} color="bg-sky-50 text-sky-900" icon="📅" />
@@ -202,8 +210,8 @@ export default async function HomePage() {
           : <QuickLink href="/team" icon="👥" label="Assignment" />}
       </div>
 
-      {/* Charts — only admins see quality donut + per-surveyor bars */}
-      {isAdmin && (
+      {/* Charts — admins & guests see quality donut + per-surveyor bars */}
+      {canViewAdmin && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Card title="Quality at a glance" subtitle={`${cleanTotal} clean · ${flaggedTotal} flagged · ${submissions.length} total`}>
             <DonutChart data={cleanVsFlagged} emptyText="No submissions yet" />
@@ -215,7 +223,7 @@ export default async function HomePage() {
       )}
 
       {/* Farms — how many forms each farm ID has, with on/off in Settings */}
-      {isAdmin && (
+      {canViewAdmin && (
         <Card title="🌾 Forms per farm" subtitle={`${totalFarms} farms with at least one reading · ${farmRows.length} farms in the form · turn farms on/off in Settings → Farms & pipes`}>
           <FarmBreakdown rows={farmRows} />
         </Card>

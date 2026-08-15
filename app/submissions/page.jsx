@@ -15,11 +15,21 @@ export const dynamic = 'force-dynamic';
 export default async function SubmissionsPage({ searchParams }) {
   const sp = (await searchParams) || {};
   let allSubmissions = [];
+  let rawSubmissions = [];
   let settings;
   let verifiedIds = new Set();
   let error = null;
   try {
-    [allSubmissions, settings, verifiedIds] = await Promise.all([fetchSubmissions(), getSettings(), getVerifiedIds()]);
+    // `allSubmissions` has admin corrections overlaid (used by every tab except
+    // Raw). `rawSubmissions` is the exact Kobo data with nothing overlaid — the
+    // Raw tab shows this so its count matches Kobo's true total. Both share the
+    // same underlying cached Kobo fetch, so this is not a second network round-trip.
+    [allSubmissions, rawSubmissions, settings, verifiedIds] = await Promise.all([
+      fetchSubmissions(),
+      fetchSubmissions({ applyCorrections: false }),
+      getSettings(),
+      getVerifiedIds(),
+    ]);
   } catch (e) {
     error = e.message;
   }
@@ -33,118 +43,144 @@ export default async function SubmissionsPage({ searchParams }) {
 
   const currentUser = await getCurrentUser();
   const isAdmin = currentUser?.role === 'admin';
+  const isGuest = currentUser?.role === 'guest';
+  // A guest sees the admin-style tabs (read-only) but can't edit or download.
+  const canViewAdmin = isAdmin || isGuest;
+  const canEdit = isAdmin;
+  const canDownload = isAdmin; // guests never download
+  const guestCap = isGuest ? Math.max(1, Number(currentUser?.maxReadings) || 10) : 0;
   // Item 7: a surveyor sees their own flags only if the admin enabled it.
-  const canSeeFlags = isAdmin || currentUser?.showFlags === true;
+  const canSeeFlags = isAdmin || (isGuest && currentUser?.show?.redFlags !== false) || currentUser?.showFlags === true;
 
-  const scopedAll = await filterSubmissionsForUser(allSubmissions);
+  const scopedAll = await filterSubmissionsForUser(allSubmissions);   // corrections overlaid
+  const scopedRaw = await filterSubmissionsForUser(rawSubmissions);   // exact Kobo data
+  // Raw and corrected are the SAME rows (same _ids) — raw just has no overrides.
+  // The Raw tab shows each row's original values by looking it up here, so its
+  // count can never disagree with "All".
+  const rawById = new Map(scopedRaw.map((s) => [String(s._id), s]));
+  const toRaw = (s) => rawById.get(String(s._id)) || s;
 
   // Red-flag detection is admin-only. Surveyors don't see flag chips, red
   // colouring, or "this submission was flagged" warnings — quality review
-  // is the admin's job, not theirs. Their view stays positive and focused
-  // on their own work.
+  // is the admin's job, not theirs.
   const allFlags = canSeeFlags ? await detectFlagsScoped(scopedAll, settings) : {};
   const isRed = (id) => canSeeFlags && !!allFlags[id] && !verifiedIds.has(String(id));
 
   const filtered0 = applyUrlFilters(scopedAll, sp);
-  const redCount = canSeeFlags ? filtered0.filter((s) => isRed(s._id)).length : 0;
-  const flagFilter = (canSeeFlags || isAdmin) ? (sp.flag || 'all') : 'all';
+  const flagFilter = (canSeeFlags || canViewAdmin) ? (sp.flag || 'all') : 'all';
 
-  // Correction status of a reading, for the Raw / Corrected / Dead tabs.
-  //  - raw       : untouched by an admin
-  //  - corrected : an admin edited the value or one or more fields
-  //  - dead      : an admin marked it a mistake (excluded from analytics)
+  // What each tab means (kept deliberately simple):
+  //  • All        — every submission, nothing hidden (incl. dead & corrected)
+  //  • Raw        — the same rows, shown EXACTLY as Kobo has them (no edits)
+  //  • Red flags  — readings the checks flagged
+  //  • Duplicate  — the same pipe read 2+ times on one date (incl. resolved)
+  //  • Dead       — readings an admin marked as a mistake
+  //  • Corrected  — readings an admin edited/corrected
+  //  • Clean      — live, not-flagged readings (your fixes land here)
   const isDead = (s) => s._correction && s._correction.field === 'dead';
   const isCorrected = (s) => s._correction && s._correction.field !== 'dead';
-  const isRaw = (s) => !s._correction;
-  const rawCount = filtered0.filter(isRaw).length;
-  const correctedCount = filtered0.filter(isCorrected).length;
-  const deadCount = filtered0.filter(isDead).length;
-
-  // Same-day duplicates: the same pipe read more than once on one date. Surfaced
-  // for everyone (admins) independent of the red-flag toggle, so both forms can
-  // be compared and one corrected/deleted.
   const dup = sameDayDuplicates(scopedAll);
   const isDuplicate = (s) => dup.ids.has(String(s._id));
-  const duplicateCount = isAdmin ? filtered0.filter(isDuplicate).length : 0;
-  // "Clean" = the trustworthy dataset: live (not dead) readings with no red
-  // flag. Correcting a flagged reading clears its flag, so your fixes land
-  // here — this is the most-accurate data to work from.
+
+  // All and Raw both show EVERYTHING, so they share the full total — Raw can
+  // never look smaller than Clean now.
+  const totalCount = filtered0.length;
+  const correctedCount = canViewAdmin ? filtered0.filter(isCorrected).length : 0;
+  const deadCount = canViewAdmin ? filtered0.filter(isDead).length : 0;
+  const duplicateCount = canViewAdmin ? filtered0.filter(isDuplicate).length : 0;
+  const redCount = canSeeFlags ? filtered0.filter((s) => isRed(s._id)).length : 0;
   const cleanCount = canSeeFlags ? filtered0.filter((s) => !isDead(s) && !isRed(s._id)).length : 0;
 
-  const filtered = filtered0.filter((s) => {
-    // The Dead tab shows dead readings only; every other tab hides them since
-    // they're mistakes.
-    if (flagFilter === 'dead') return isDead(s);
-    if (isDead(s)) return false;
-    if (flagFilter === 'raw') return isRaw(s);
-    if (flagFilter === 'corrected' || flagFilter === 'fixed') return isCorrected(s);
-    if (flagFilter === 'duplicates') return isDuplicate(s);
-    if (!canSeeFlags) return true;
-    if (flagFilter === 'flagged') return isRed(s._id);
-    if (flagFilter === 'clean') return !isRed(s._id);
-    return true; // 'all'
-  });
+  let filtered;
+  if (flagFilter === 'raw') {
+    filtered = filtered0.map(toRaw); // same rows as All, original Kobo values
+  } else {
+    filtered = filtered0.filter((s) => {
+      if (flagFilter === 'all') return true;             // everything, incl. dead
+      if (flagFilter === 'dead') return isDead(s);
+      // Duplicates INCLUDE resolved (dead) partners so you can see which you
+      // deleted vs kept — checked before the dead rows are hidden below.
+      if (flagFilter === 'duplicates') return isDuplicate(s);
+      if (isDead(s)) return false;
+      if (flagFilter === 'corrected' || flagFilter === 'fixed') return isCorrected(s);
+      if (!canSeeFlags) return true;
+      if (flagFilter === 'flagged') return isRed(s._id);
+      if (flagFilter === 'clean') return !isRed(s._id);
+      return true;
+    });
+  }
 
   const sorted = [...filtered].sort(
     (a, b) => readingDate(b).getTime() - readingDate(a).getTime()
   );
-  const filteredFlagCount = canSeeFlags ? sorted.filter((s) => isRed(s._id)).length : 0;
+  // Guests only ever see a small sample so no bulk data leaves the tool.
+  const shown = guestCap ? sorted.slice(0, guestCap) : sorted;
+  const filteredFlagCount = canSeeFlags ? shown.filter((s) => isRed(s._id)).length : 0;
 
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <div>
-          <h2 className="text-xl font-semibold">{isAdmin ? 'Submissions' : 'My Submissions'}</h2>
+          <h2 className="text-xl font-semibold">{isGuest ? 'Submissions (demo)' : isAdmin ? 'Submissions' : 'My Submissions'}</h2>
           <p className="text-sm text-slate-500">
-            {sorted.length} shown
+            {shown.length} shown
             {canSeeFlags && <> · {filteredFlagCount} flagged</>}
-            {!isAdmin && <> · only the readings you sent</>}
+            {isGuest && <> · demo view, limited to {guestCap}</>}
+            {!isAdmin && !isGuest && <> · only the readings you sent</>}
           </p>
         </div>
-        <Suspense fallback={<div className="h-9 w-24 bg-slate-200 rounded animate-pulse" />}>
-          <ExportButton />
-        </Suspense>
+        {canDownload && (
+          <Suspense fallback={<div className="h-9 w-24 bg-slate-200 rounded animate-pulse" />}>
+            <ExportButton />
+          </Suspense>
+        )}
       </div>
 
       <Suspense fallback={<div className="h-12 bg-slate-100 rounded-lg animate-pulse" />}>
         <FilterBar />
       </Suspense>
 
-      {(canSeeFlags || isAdmin) && (
+      {(canSeeFlags || canViewAdmin) && (
         <>
-          {!isAdmin && (
+          {!isAdmin && !isGuest && (
             <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               These are readings the reviewer flagged for you to double-check.
             </div>
           )}
           <div className="flex gap-2 overflow-x-auto pb-1">
-            <FlagChip name="all" current={flagFilter} sp={sp}>All</FlagChip>
-            {isAdmin ? (
+            {canViewAdmin ? (
               <>
-                <FlagChip name="raw" current={flagFilter} sp={sp}>🗂️ Raw ({rawCount})</FlagChip>
-                <FlagChip name="corrected" current={flagFilter} sp={sp}>✎ Corrected ({correctedCount})</FlagChip>
-                <FlagChip name="clean" current={flagFilter} sp={sp}>✓ Clean ({cleanCount})</FlagChip>
-                {duplicateCount > 0 && <FlagChip name="duplicates" current={flagFilter} sp={sp}>👯 Duplicates ({duplicateCount})</FlagChip>}
+                <FlagChip name="all" current={flagFilter} sp={sp}>All ({totalCount})</FlagChip>
+                <FlagChip name="raw" current={flagFilter} sp={sp}>🗂️ Raw ({totalCount})</FlagChip>
+                <FlagChip name="flagged" current={flagFilter} sp={sp} danger>🚩 Red flags ({redCount})</FlagChip>
+                {duplicateCount > 0 && <FlagChip name="duplicates" current={flagFilter} sp={sp}>👯 Duplicate ({duplicateCount})</FlagChip>}
                 <FlagChip name="dead" current={flagFilter} sp={sp}>🗑️ Dead ({deadCount})</FlagChip>
-                <FlagChip name="flagged" current={flagFilter} sp={sp} danger>🚩 Flagged ({redCount})</FlagChip>
+                <FlagChip name="corrected" current={flagFilter} sp={sp}>✎ Corrected ({correctedCount})</FlagChip>
+                <FlagChip name="clean" current={flagFilter} sp={sp}>✨ Clean ({cleanCount})</FlagChip>
               </>
             ) : (
               <>
+                <FlagChip name="all" current={flagFilter} sp={sp}>All</FlagChip>
                 <FlagChip name="clean" current={flagFilter} sp={sp}>✓ Clean</FlagChip>
                 <FlagChip name="flagged" current={flagFilter} sp={sp} danger>🚩 Flagged ({redCount})</FlagChip>
               </>
             )}
           </div>
+          {isAdmin && (
+            <p className="text-[11px] text-slate-500 -mt-1">
+              <b>All</b> = everything · <b>Raw</b> = exactly as Kobo stored it · <b>Red flags</b> = flagged for review · <b>Duplicate</b> = same pipe read 2+×/day · <b>Dead</b> = mistakes you removed · <b>Corrected</b> = you edited it · <b>Clean</b> = trustworthy data (your fixes included).
+            </p>
+          )}
         </>
       )}
 
       <SubmissionList
-        submissions={sorted}
+        submissions={shown}
         flags={allFlags}
-        allSubmissions={scopedAll}
-        canVerify={isAdmin}
+        allSubmissions={isGuest ? shown : scopedAll}
+        canVerify={canEdit}
         verifiedIds={canSeeFlags ? Array.from(verifiedIds) : []}
-        duplicates={isAdmin ? dup.map : {}}
+        duplicates={canViewAdmin ? dup.map : {}}
       />
     </div>
   );

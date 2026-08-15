@@ -30,17 +30,11 @@ function escapeHtml(s) {
   return String(s ?? '—').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-const MARKER_SHADOW = 'https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-shadow.png';
-function pinIcon(L, color) {
-  return L.icon({
-    iconUrl: `https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-2x-${color}.png`,
-    shadowUrl: MARKER_SHADOW,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41],
-  });
-}
+// Pin colours as hex — drawn on a single <canvas> (see preferCanvas below)
+// instead of one downloaded PNG image per marker. With 1000+ readings the old
+// image markers meant 1000+ HTTP image loads + 1000 DOM nodes, which made the
+// map lag badly. Canvas circle markers render the whole set in one pass.
+const PIN_COLORS = { red: '#dc2626', blue: '#2563eb', orange: '#f59e0b', grey: '#94a3b8' };
 
 function loadScript(id, src) {
   return new Promise((resolve, reject) => {
@@ -83,7 +77,7 @@ function attachStreetFallback(L, map, tileLayerRef) {
 
 import { IRRIGATION_META } from '@/lib/irrigation';
 
-export default function MapView({ points = [], showFlagFilter = true, irrigation = null }) {
+export default function MapView({ points = [], showFlagFilter = true, irrigation = null, allowKoboLink = true }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const tileLayerRef = useRef(null);
@@ -100,6 +94,7 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
 
   const flaggedCount = points.filter((p) => p.isFlagged).length;
   const cleanCount = points.length - flaggedCount;
+  const dupCount = points.filter((p) => p.isDuplicate).length;
   const irrCount = (st) => points.filter((p) => p.isLatest && p.irrStatus === st).length;
 
   useEffect(() => {
@@ -116,8 +111,10 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
         const L = window.L;
         if (cancelled || !containerRef.current || !L) return;
         if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
-        const map = L.map(containerRef.current, { zoomControl: true }).setView([30.9, 75.8], 9);
+        // preferCanvas: draw all markers on one canvas — the big speed win.
+        const map = L.map(containerRef.current, { zoomControl: true, preferCanvas: true }).setView([30.9, 75.8], 9);
         mapRef.current = map;
+        const canvasRenderer = L.canvas({ padding: 0.5 });
         const conf = TILE_LAYERS[layer];
         tileLayerRef.current = L.tileLayer(conf.url, { maxZoom: 19, maxNativeZoom: conf.maxNativeZoom || 19, attribution: conf.attribution }).addTo(map);
         attachStreetFallback(L, map, tileLayerRef);
@@ -126,10 +123,6 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
         setTimeout(() => { try { map.invalidateSize(); } catch {} }, 300);
         setTimeout(() => { try { map.invalidateSize(); } catch {} }, 1200);
 
-        const icons = {
-          red: pinIcon(L, 'red'), blue: pinIcon(L, 'blue'),
-          orange: pinIcon(L, 'orange'), grey: pinIcon(L, 'grey'),
-        };
         markersRef.current = [];
 
         for (const p of points) {
@@ -137,13 +130,18 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
           //  • flags (default): red = flagged, blue = clean (admin only)
           //  • irrigation: red = dry/irrigate, orange = low, blue = wet,
           //    grey = no current reading (only the pipe's latest pin is colored)
-          let icon;
+          let color;
           if (colorMode === 'irrigation' && irrigation) {
-            icon = icons[IRRIGATION_META[p.irrStatus || 'na'].pin] || icons.grey;
+            color = PIN_COLORS[IRRIGATION_META[p.irrStatus || 'na'].pin] || PIN_COLORS.grey;
           } else {
-            icon = (showFlagFilter && p.isFlagged) ? icons.red : icons.blue;
+            color = (showFlagFilter && p.isFlagged) ? PIN_COLORS.red : PIN_COLORS.blue;
           }
-          const m = L.marker([p.lat, p.lng], { icon });
+          const flaggedPin = showFlagFilter && p.isFlagged;
+          const m = L.circleMarker([p.lat, p.lng], {
+            renderer: canvasRenderer,
+            radius: flaggedPin ? 7 : 5,
+            color: '#ffffff', weight: 1.5, fillColor: color, fillOpacity: 0.92,
+          });
           const dir = `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
           const showRed = showFlagFilter && p.isFlagged;
           const flagHtml = (showRed && p.flagTypes?.length)
@@ -152,7 +150,7 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
           // "View submission" link is admin-only — kobo-view itself is
           // already gated server-side, but no point showing surveyors a
           // link that takes them to an "Admin only" panel.
-          const viewLink = showFlagFilter
+          const viewLink = allowKoboLink
             ? `<a target="_blank" href="/kobo-view?id=${encodeURIComponent(p.id)}" style="background:#0ea5e9;color:white;font-size:11px;padding:5px 10px;border-radius:5px;text-decoration:none;">View submission</a>`
             : '';
           const popup = `
@@ -197,6 +195,7 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
     }
     const isFlagged = p ? p.isFlagged : item;
     if (!showFlagFilter) return true;
+    if (filterMode === 'duplicates') return p ? !!p.isDuplicate : false;
     return filterMode === 'all' || (filterMode === 'flagged' && isFlagged) || (filterMode === 'clean' && !isFlagged);
   }
 
@@ -286,6 +285,7 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
           <FilterBtn active={filterMode === 'all'} onClick={() => setFilterMode('all')}>All ({points.length})</FilterBtn>
           <FilterBtn active={filterMode === 'clean'} onClick={() => setFilterMode('clean')} color="text-sky-700">● Clean ({cleanCount})</FilterBtn>
           <FilterBtn active={filterMode === 'flagged'} onClick={() => setFilterMode('flagged')} color="text-red-700">🚩 ({flaggedCount})</FilterBtn>
+          {dupCount > 0 && <FilterBtn active={filterMode === 'duplicates'} onClick={() => setFilterMode('duplicates')} color="text-indigo-700">👯 ({dupCount})</FilterBtn>}
         </div>
       )}
 

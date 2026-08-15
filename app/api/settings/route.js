@@ -30,13 +30,14 @@ export async function GET() {
     };
     return NextResponse.json({ settings, activeForm, adminInfo });
   }
-  // Non-admin: strip Kobo API tokens AND admin personal profiles (don't leak
-  // names/photos/phones of admins to surveyors).
+  // Non-admin: strip Kobo API tokens, admin personal profiles AND the guest
+  // password (never leak any credential to surveyors/guests).
   const safe = {
     ...settings,
     forms: (settings.forms || []).map((f) => ({ ...f, token: undefined })),
     adminProfiles: undefined,
     security: undefined,
+    guest: settings.guest ? { ...settings.guest, password: undefined } : undefined,
   };
   return NextResponse.json({ settings: safe });
 }
@@ -63,6 +64,12 @@ export async function PUT(request) {
     pipe: { ...DEFAULT_SETTINGS.pipe, ...(existing.pipe || {}), ...(body.pipe || {}) },
     security: { ...DEFAULT_SETTINGS.security, ...(existing.security || {}), ...(body.security || {}) },
     reading: { ...DEFAULT_SETTINGS.reading, ...(existing.reading || {}), ...(body.reading || {}) },
+    guest: {
+      ...DEFAULT_SETTINGS.guest, ...(existing.guest || {}), ...(body.guest || {}),
+      show: { ...DEFAULT_SETTINGS.guest.show, ...((existing.guest || {}).show || {}), ...((body.guest || {}).show || {}) },
+      landing: { ...DEFAULT_SETTINGS.guest.landing, ...((existing.guest || {}).landing || {}), ...((body.guest || {}).landing || {}) },
+    },
+    landingControls: { ...DEFAULT_SETTINGS.landingControls, ...(existing.landingControls || {}), ...(body.landingControls || {}) },
     adminProfiles: existing.adminProfiles || {},  // <-- preserve, never overwrite from this endpoint
   };
 

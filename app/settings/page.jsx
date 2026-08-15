@@ -7,7 +7,6 @@ import DataStorage from '@/components/DataStorage';
 const FLAG_LABELS = {
   // ON by default for pipes
   missing_photo: 'Missing photo on a submission',
-  stale_no_reading: 'Stale — no reading within the current reading period',
   location_far: 'GPS far outside the whole project area (swapped / mistyped lat-long)',
   stale_unchanged: 'Stuck — 3 identical water-level readings in a row',
   future_date: 'Future-dated reading',
@@ -18,6 +17,7 @@ const FLAG_LABELS = {
   // Advanced — usually OFF for AWD pipes, because water levels naturally rise
   // and fall. Turn on only if your protocol expects levels to only increase.
   rollback: 'Water level dropped vs the previous reading',
+  reading_jump_up: 'Water level jumped up vs the previous reading (e.g. 150 → 300, roughly doubled)',
   huge_jump: 'Water level jumped by a huge amount (likely extra digit)',
   growth_anomaly: 'Water level rose far faster than usual for this pipe',
   reverse: 'End reading lower than start reading (within one submission)',
@@ -43,6 +43,7 @@ const SECTIONS = [
   { id: 'geofence', icon: '📍', label: 'Pipe locations', hint: 'Geofence & Sheet' },
   { id: 'registry', icon: '🎚️', label: 'Farms & pipes',  hint: 'Turn on/off' },
   { id: 'security', icon: '🔐', label: 'Admin passwords', hint: 'Change admin login' },
+  { id: 'guest',    icon: '👁️', label: 'Guest & landing', hint: 'Viewer link & landing pages' },
   { id: 'photo',    icon: '🖼️', label: 'Photo quality',  hint: 'HD vs space' },
   { id: 'contact',  icon: '📬', label: 'Contact info',    hint: 'Emails & phone' },
   { id: 'flags',    icon: '🚩', label: 'Red flag rules',  hint: 'What to detect' },
@@ -60,9 +61,11 @@ export default function SettingsPage() {
   const [activeForm, setActiveForm] = useState(null);
   const [adminInfo, setAdminInfo] = useState(null);
   const [lastSavedAt, setLastSavedAt] = useState(null);
+  const [origin, setOrigin] = useState('');
   const dirtyRef = useRef(false);
 
   useEffect(() => { load(); }, []);
+  useEffect(() => { if (typeof window !== 'undefined') setOrigin(window.location.origin); }, []);
 
   // Warn before closing the tab if there are unsaved changes
   useEffect(() => {
@@ -96,7 +99,7 @@ export default function SettingsPage() {
       // Fill them with safe defaults so the page never crashes on access.
       setSettings({
         contact: {}, redFlags: {}, project: {}, forms: [],
-        pipe: { insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0, irrigateAtOrBelowMm: 50, maxLocationKm: 100 },
+        pipe: { insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0, irrigateAtOrBelowMm: 50, maxLocationKm: 100, flagWindowDays: '' },
         security: { adminPasswords: [] },
         reading: {
           target: 2, periodLabel: 'week', periodDays: 7,
@@ -109,7 +112,7 @@ export default function SettingsPage() {
         project: { ...(data.settings.project || {}) },
         forms: Array.isArray(data.settings.forms) ? data.settings.forms : [],
         pipe: {
-          insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0, irrigateAtOrBelowMm: 50, maxLocationKm: 100,
+          insideMinMm: 50, insideMaxMm: 250, outsideStandardMm: 150, outsideToleranceMm: 0, irrigateAtOrBelowMm: 50, maxLocationKm: 100, flagWindowDays: '',
           ...(data.settings.pipe || {}),
         },
         security: {
@@ -157,6 +160,10 @@ export default function SettingsPage() {
   function updateGeofence(k, v) { setS({ ...settings, pipe: { ...(settings.pipe || {}), geofence: { ...((settings.pipe || {}).geofence || {}), [k]: v } } }); }
   function updateSecurity(list) { setS({ ...settings, security: { ...(settings.security || {}), adminPasswords: list } }); }
   function updateProject(k, v) { setS({ ...settings, project: { ...settings.project, [k]: v } }); }
+  function updateGuest(k, v) { setS({ ...settings, guest: { ...(settings.guest || {}), [k]: v } }); }
+  function updateGuestShow(k, v) { setS({ ...settings, guest: { ...(settings.guest || {}), show: { ...((settings.guest || {}).show || {}), [k]: v } } }); }
+  function updateGuestLanding(k, v) { setS({ ...settings, guest: { ...(settings.guest || {}), landing: { ...((settings.guest || {}).landing || {}), [k]: v } } }); }
+  function updateLandingControls(k, v) { setS({ ...settings, landingControls: { ...(settings.landingControls || {}), [k]: v } }); }
 
   function addForm() {
     const list = [...(settings.forms || [])];
@@ -344,6 +351,16 @@ export default function SettingsPage() {
           </div>
           <p className="text-[11px] text-slate-500">Any reading whose GPS is farther than this from the centre of <i>all</i> readings raises <i>GPS far outside the whole project area</i> — this catches a swapped or mistyped latitude/longitude (e.g. a pipe that lands hundreds of km away). Requires the <b>🚩 Red flag rules</b> toggle of the same name to be on. Clear the box to disable.</p>
         </div>
+        <div className="border border-amber-200 bg-amber-50/40 rounded-lg p-3 space-y-2">
+          <div className="text-xs font-semibold text-slate-700">🗓️ Red-flag review window</div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Only red-flag readings from the last N days">
+              <input type="number" min="1" value={settings.pipe?.flagWindowDays ?? ''} placeholder="e.g. 20 (blank = all)"
+                onChange={(e) => updatePipe('flagWindowDays', e.target.value === '' ? '' : Number(e.target.value))} className="input"/>
+            </Field>
+          </div>
+          <p className="text-[11px] text-slate-500">Old readings that haven't been read in a while stop showing as red flags — set this to (say) 20 so only recent readings are flagged. Leave blank to flag every reading regardless of age. Older readings still count as history for comparisons; they just don't clutter the flag list.</p>
+        </div>
         <p className="text-[11px] text-slate-500">Clear any box to disable that check without touching the red-flag toggles.</p>
       </Section>
 
@@ -390,6 +407,14 @@ export default function SettingsPage() {
           <p>• Each password = one admin (Admin 1, Admin 2…), matching the profile order in <span className="font-mono">adminProfiles</span>.</p>
           <p>• ⚠️ After saving a change to your own password you will be logged out — log back in with the new one. Passwords shorter than 4 characters are ignored.</p>
         </div>
+      </Section>
+
+      {/* Guest viewer + landing page control */}
+      <Section id="guest" title="👁️ Guest viewer & landing pages"
+        subtitle="A read-only link you can share so people can explore the tool safely, plus full control of both landing pages.">
+        <GuestPanel settings={settings} origin={origin}
+          updateGuest={updateGuest} updateGuestShow={updateGuestShow}
+          updateGuestLanding={updateGuestLanding} updateLandingControls={updateLandingControls} />
       </Section>
 
       {/* Photo quality */}
@@ -496,6 +521,88 @@ function Toggle({ label, checked, onChange }) {
       <span>{label}</span>
       <input type="checkbox" checked={!!checked} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4"/>
     </label>
+  );
+}
+
+// ---- Guest viewer + landing page controls ----
+const GUEST_SECTIONS = [
+  ['overview', 'Overview'], ['submissions', 'Submissions'], ['map', 'Map'],
+  ['usage', 'Water level'], ['assignment', 'Assignment / readings'], ['team', 'Team (no passwords)'],
+  ['redFlags', 'Red-flag info'], ['charts', 'Charts'],
+];
+function GuestPanel({ settings, origin, updateGuest, updateGuestShow, updateGuestLanding, updateLandingControls }) {
+  const g = settings.guest || {};
+  const show = g.show || {};
+  const gl = g.landing || {};
+  const lc = settings.landingControls || {};
+  const [copied, setCopied] = useState(false);
+  const link = `${origin || ''}/view`;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
+  };
+  return (
+    <div className="space-y-4">
+      <Toggle label="Enable the guest viewer link" checked={g.enabled === true} onChange={(v) => updateGuest('enabled', v)} />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="Guest password (you choose it)">
+          <input value={g.password || ''} onChange={(e) => updateGuest('password', e.target.value)} placeholder="e.g. show2026" className="input font-mono"/>
+        </Field>
+        <Field label="Max readings a guest can see">
+          <input type="number" min="1" max="200" value={g.maxReadings ?? 10} onChange={(e) => updateGuest('maxReadings', Math.max(1, Number(e.target.value) || 10))} className="input"/>
+        </Field>
+      </div>
+
+      {/* Shareable link */}
+      <div className="bg-brand-50 border border-brand-200 rounded-lg p-3 space-y-1.5">
+        <div className="text-xs font-semibold text-brand-900">🔗 Shareable viewer link</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <code className="font-mono text-xs bg-white px-2 py-1 rounded border border-brand-100 break-all flex-1 min-w-[180px]">{link || '…'}</code>
+          <button onClick={copy} className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 text-white font-medium hover:bg-brand-700">{copied ? '✓ Copied' : 'Copy link'}</button>
+        </div>
+        <p className="text-[11px] text-slate-600">Send this link + the guest password to anyone you want to show the tool. They see a read-only demo — they can't edit, download, open Kobo, or see more than {g.maxReadings ?? 10} readings. <b>Save your changes first</b> for the link to work.</p>
+      </div>
+
+      {/* What a guest can open */}
+      <div className="border border-slate-200 rounded-lg p-3">
+        <div className="text-xs font-semibold text-slate-700 mb-1.5">What the guest can open</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+          {GUEST_SECTIONS.map(([k, label]) => (
+            <Toggle key={k} label={label} checked={show[k] !== false} onChange={(v) => updateGuestShow(k, v)} />
+          ))}
+        </div>
+        <p className="text-[11px] text-slate-500 mt-1">Settings, Debug, Kobo View, Chat and all downloads are <b>always</b> hidden from guests.</p>
+      </div>
+
+      {/* Guest landing page */}
+      <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+        <div className="text-xs font-semibold text-slate-700">Guest landing page (what the /view link shows)</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <Field label="Title (blank = project name)"><input value={gl.projectName || ''} onChange={(e) => updateGuestLanding('projectName', e.target.value)} className="input"/></Field>
+          <Field label="Tagline"><input value={gl.tagline ?? ''} onChange={(e) => updateGuestLanding('tagline', e.target.value)} placeholder="Water-level monitoring dashboard" className="input"/></Field>
+        </div>
+        <Field label="Description (blank = a generic line)"><textarea value={gl.description || ''} onChange={(e) => updateGuestLanding('description', e.target.value)} rows="2" className="input"/></Field>
+        <div className="grid grid-cols-2 gap-1">
+          <Toggle label="Show university names" checked={gl.showUniversities === true} onChange={(v) => updateGuestLanding('showUniversities', v)} />
+          <Toggle label="Show research blurb" checked={gl.showResearchLine === true} onChange={(v) => updateGuestLanding('showResearchLine', v)} />
+          <Toggle label="Show feature cards" checked={gl.showFeatures !== false} onChange={(v) => updateGuestLanding('showFeatures', v)} />
+          <Toggle label="Show contact section" checked={gl.showContact === true} onChange={(v) => updateGuestLanding('showContact', v)} />
+        </div>
+        <p className="text-[11px] text-slate-500">By default the guest landing hides the universities, the research blurb and any “PVC / AWD” wording.</p>
+      </div>
+
+      {/* Normal landing page */}
+      <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+        <div className="text-xs font-semibold text-slate-700">Normal landing page (the public one everyone sees)</div>
+        <Field label="Tagline override (blank = the Project info tagline)"><input value={lc.tagline || ''} onChange={(e) => updateLandingControls('tagline', e.target.value)} className="input"/></Field>
+        <div className="grid grid-cols-2 gap-1">
+          <Toggle label="Show university names" checked={lc.showUniversities !== false} onChange={(v) => updateLandingControls('showUniversities', v)} />
+          <Toggle label="Show research blurb" checked={lc.showResearchLine !== false} onChange={(v) => updateLandingControls('showResearchLine', v)} />
+          <Toggle label="Show feature cards" checked={lc.showFeatures !== false} onChange={(v) => updateLandingControls('showFeatures', v)} />
+        </div>
+        <p className="text-[11px] text-slate-500">The contact section on the normal landing is controlled in <b>📬 Contact info → Show on landing page</b>.</p>
+      </div>
+    </div>
   );
 }
 

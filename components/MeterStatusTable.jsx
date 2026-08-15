@@ -18,7 +18,8 @@ async function parseJsonSafe(res) {
 
 // week = 'this' (default) | 'last'
 // date = 'YYYY-MM-DD' -> overrides week, shows the period containing that date
-export default function MeterStatusTable({ week = 'this', date = '' }) {
+// days = optional cycle-length override in days (7/14/21) from the Assignment tab
+export default function MeterStatusTable({ week = 'this', date = '', days = 0 }) {
   const isLast = week === 'last' && !date;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -33,10 +34,12 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
     setLoading(true);
     (async () => {
       try {
-        let url = '/api/meter-status';
-        if (date) url += `?date=${encodeURIComponent(date)}`;
-        else if (week === 'last') url += '?week=last';
-        const res = await fetch(url);
+        const params = new URLSearchParams();
+        if (date) params.set('date', date);
+        else if (week === 'last') params.set('week', 'last');
+        if (days) params.set('days', String(days));
+        const qs = params.toString();
+        const res = await fetch(`/api/meter-status${qs ? `?${qs}` : ''}`);
         const d = await parseJsonSafe(res);
         if (!res.ok) throw new Error(d.error || 'Failed to load pipes');
         if (alive) { setData(d); setError(null); }
@@ -44,7 +47,7 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
       finally { if (alive) setLoading(false); }
     })();
     return () => { alive = false; };
-  }, [week, date]);
+  }, [week, date, days]);
 
   const villages = useMemo(() => {
     if (!data?.villages) return [];
@@ -190,10 +193,11 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
                           ➕ Take reading
                         </a>
                       )}
-                      <div className="text-right">
-                        <span className={`inline-block text-[11px] px-2 py-0.5 rounded-full border font-medium ${st.chip}`}>{st.label}</span>
-                        <div className="text-[10px] text-slate-400 mt-0.5 tabular-nums">{Math.min(m.countThisPeriod, target)}/{target}</div>
-                      </div>
+                      {/* Status chip + count sit inline, on the SAME level as the
+                          details / Take-reading buttons (was stacked, which made
+                          "Take reading" and "Needs reading" look misaligned). */}
+                      <span className={`inline-block text-[11px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap ${st.chip}`}>{st.label}</span>
+                      <span className="text-[10px] text-slate-400 tabular-nums">{Math.min(m.countThisPeriod, target)}/{target}</span>
                     </div>
                   </div>
 
@@ -208,6 +212,7 @@ export default function MeterStatusTable({ week = 'this', date = '' }) {
                       <CopyRow label="Pipe ID" value={m.serial} />
                       {m.refLoc && <CopyRow label="Reference GPS" value={m.refLoc} />}
                       <div className="text-[10px] text-slate-400 pt-0.5">Then just fill the outside height, water level, GPS and photos.</div>
+                      <ReadingTimeline history={m.history} />
                       {m.lat != null && m.lng != null && (
                         <PipeDetailMap lat={m.lat} lng={m.lng} serial={m.serial} />
                       )}
@@ -233,6 +238,38 @@ function FilterBtn({ active, onClick, children }) {
   );
 }
 
+
+// Reading timeline: a left-to-right flow of when this pipe was actually read
+// (form dates), the reading each time, and the gap in days between visits — so
+// you can see the rhythm and spot long gaps at a glance.
+function ReadingTimeline({ history }) {
+  if (!Array.isArray(history) || history.length === 0) {
+    return <div className="text-[10px] text-slate-400 pt-1">🕒 No readings recorded yet.</div>;
+  }
+  const fmt = (d) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  return (
+    <div className="pt-1.5">
+      <div className="text-[10px] text-slate-400 mb-1">🕒 When this pipe was read ({history.length}) — gaps shown in days:</div>
+      <div className="flex items-center gap-1 overflow-x-auto pb-1">
+        {history.map((h, i) => (
+          <div key={i} className="flex items-center gap-1 shrink-0">
+            {i > 0 && (
+              <div className="flex flex-col items-center px-0.5 leading-none">
+                <span className={`text-[9px] ${h.gapDays > 10 ? 'text-rose-500 font-semibold' : 'text-slate-400'}`}>+{h.gapDays}d</span>
+                <span className="text-slate-300 text-[10px]">→</span>
+              </div>
+            )}
+            <div className="border border-slate-200 rounded-lg px-2 py-1 bg-white text-center min-w-[56px]">
+              <div className="text-[10px] font-medium text-slate-700 whitespace-nowrap">{fmt(h.date)}</div>
+              <div className="text-[11px] tabular-nums font-semibold">{h.reading ?? '—'}<span className="text-[8px] text-slate-400"> mm</span></div>
+              {h.surveyor && <div className="text-[8px] text-slate-400 truncate max-w-[64px]">{h.surveyor}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // Mini map of where the pipe sits (reference GPS, or the median of its
 // readings) plus a "how far am I?" button that uses the phone's location to
@@ -319,6 +356,11 @@ function PipeDetailMap({ lat, lng, serial }) {
           className="text-[11px] px-2.5 py-1 rounded-full bg-field-600 text-white font-medium hover:bg-field-700">🧭 Directions in Google Maps</a>
       </div>
       {state === 'error' && <div className="text-[11px] text-red-600">{err}</div>}
+      {me && (
+        <div className="text-[10px] text-slate-400">
+          Road distance uses a free OpenStreetMap router — occasionally slow or unavailable, in which case the straight-line distance shows instead. For turn-by-turn navigation, use <b>Directions in Google Maps</b> (most reliable on a phone).
+        </div>
+      )}
     </div>
   );
 }
