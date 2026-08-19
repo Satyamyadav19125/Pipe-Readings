@@ -16,7 +16,13 @@ export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
   const currentUser = await getCurrentUser();
-  if (!currentUser) return <Landing />;
+  if (!currentUser) {
+    // Optionally show the generic landing to everyone not logged in, so the
+    // shareable guest link can't be stripped back to reveal real branding.
+    let generic = false;
+    try { generic = (await getSettings())?.landingControls?.publicGeneric === true; } catch {}
+    return <Landing variant={generic ? 'guest' : 'normal'} />;
+  }
   const isAdmin = currentUser.role === 'admin';
   const isGuest = currentUser.role === 'guest';
   const canViewAdmin = isAdmin || isGuest; // guest sees the admin dashboard, read-only
@@ -160,13 +166,13 @@ export default async function HomePage() {
         <div className="text-3xl shrink-0">💧</div>
         <div className="min-w-0 flex-1">
           <h2 className="text-lg font-bold">Welcome, {currentUser.name}!</h2>
-          <p className="text-sm text-slate-600">
-            {isGuest
-              ? 'Read-only demo view. You can browse the dashboard, but nothing can be changed or downloaded.'
-              : isAdmin
-              ? 'Full admin access. Manage assignments, settings, and view all data.'
-              : `You're assigned to ${currentUser.villages?.length || 0} village${currentUser.villages?.length === 1 ? '' : 's'}. Thanks for your work!`}
-          </p>
+          {!isGuest && (
+            <p className="text-sm text-slate-600">
+              {isAdmin
+                ? 'Full admin access. Manage assignments, settings, and view all data.'
+                : `You're assigned to ${currentUser.villages?.length || 0} village${currentUser.villages?.length === 1 ? '' : 's'}. Thanks for your work!`}
+            </p>
+          )}
         </div>
         <Link href="/profile"
           className="hidden sm:inline-flex items-center gap-1 text-xs bg-white px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50">
@@ -177,8 +183,9 @@ export default async function HomePage() {
       {/* KPI grid — admins & guests see the full set, surveyors see 4 positive ones */}
       {canViewAdmin ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-          <Kpi label="Total submissions" value={submissions.length.toLocaleString()} color="bg-brand-50 text-brand-900" icon="📋" />
-          <Kpi label="Clean readings" value={cleanTotal.toLocaleString()} color="bg-field-50 text-field-900" icon="✓" />
+          {/* Headline = the trustworthy CLEAN total, not Kobo's raw count. */}
+          <Kpi label="Clean submissions" value={cleanTotal.toLocaleString()} color="bg-field-50 text-field-900" icon="✓" />
+          <Kpi label="All submissions" value={submissions.length.toLocaleString()} color="bg-brand-50 text-brand-900" icon="📋" />
           <Kpi label="🚩 Flagged" value={flaggedTotal.toLocaleString()} color={flaggedTotal > 0 ? 'bg-red-50 text-red-900' : 'bg-slate-50 text-slate-700'} icon="" />
           <Kpi label="👯 Duplicate readings" value={duplicateTotal.toLocaleString()} color={duplicateTotal > 0 ? 'bg-indigo-50 text-indigo-900' : 'bg-slate-50 text-slate-700'} icon="" />
           <Kpi label="Quality rate" value={submissions.length > 0 ? `${Math.round((cleanTotal / submissions.length) * 100)}%` : '—'} color="bg-emerald-50 text-emerald-900" icon="📊" />

@@ -41,27 +41,31 @@ export default function MissedPage() {
         </p>
       </div>
 
-      {/* Reading cycle selector — 1 / 2 / 3 weeks (or the settings default). */}
-      <div className="bg-white rounded-xl shadow-sm p-3 flex items-center gap-2 flex-wrap">
-        <label className="text-xs font-medium text-slate-600">🔁 Reading cycle:</label>
-        <div className="flex gap-1.5 flex-wrap">
-          <QuickBtn active={cycleDays === 0} onClick={() => setCycleDays(0)}>Default ({periodDays}d)</QuickBtn>
-          <QuickBtn active={cycleDays === 7} onClick={() => setCycleDays(7)}>1 week</QuickBtn>
-          <QuickBtn active={cycleDays === 14} onClick={() => setCycleDays(14)}>2 weeks</QuickBtn>
-          <QuickBtn active={cycleDays === 21} onClick={() => setCycleDays(21)}>3 weeks</QuickBtn>
+      {/* ONE control block: pick which period to view, plus (compact) how long
+          a reading cycle is. */}
+      <div className="bg-white rounded-xl shadow-sm p-3 space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <label className="text-xs font-medium text-slate-600">📅 Show {periodLabel} of:</label>
+          <div className="flex gap-1.5 flex-wrap">
+            <QuickBtn active={week === 'this'} onClick={() => { setWeek('this'); setDate(''); }}>This {periodLabel}</QuickBtn>
+            <QuickBtn active={week === 'last' && !date} onClick={() => { setWeek('last'); setDate(''); }}>Last {periodLabel}</QuickBtn>
+            <QuickBtn active={week === 'last' && date === isoDaysAgo(step * 2)} onClick={() => { setWeek('last'); setDate(isoDaysAgo(step * 2)); }}>2 {periodLabel}s ago</QuickBtn>
+            <QuickBtn active={week === 'last' && date === isoDaysAgo(step * 3)} onClick={() => { setWeek('last'); setDate(isoDaysAgo(step * 3)); }}>3 {periodLabel}s ago</QuickBtn>
+          </div>
         </div>
-        <span className="text-[11px] text-slate-400 w-full sm:w-auto">Changes how long a pipe has to hit its target before it counts as missed.</span>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm p-3 flex items-center gap-2 flex-wrap">
-        <label className="text-xs font-medium text-slate-600">📅 Show {periodLabel} of:</label>
-        <input type="date" value={date} max={isoDaysAgo(0)} onChange={(e) => { setWeek('last'); setDate(e.target.value); }}
-          className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm" />
-        <div className="flex gap-1.5 ml-auto flex-wrap">
-          <QuickBtn active={week === 'this'} onClick={() => { setWeek('this'); setDate(''); }}>This {periodLabel}</QuickBtn>
-          <QuickBtn active={week === 'last' && !date} onClick={() => { setWeek('last'); setDate(''); }}>Last {periodLabel}</QuickBtn>
-          <QuickBtn active={week === 'last' && date === isoDaysAgo(step * 2)} onClick={() => { setWeek('last'); setDate(isoDaysAgo(step * 2)); }}>2 {periodLabel}s ago</QuickBtn>
-          <QuickBtn active={week === 'last' && date === isoDaysAgo(step * 3)} onClick={() => { setWeek('last'); setDate(isoDaysAgo(step * 3)); }}>3 {periodLabel}s ago</QuickBtn>
+        <div className="flex items-center gap-2 flex-wrap border-t border-slate-100 pt-2">
+          <label className="text-xs font-medium text-slate-600">🔁 Cycle length:</label>
+          <select value={cycleDays} onChange={(e) => setCycleDays(Number(e.target.value))}
+            className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">
+            <option value={0}>Default ({periodDays} days)</option>
+            <option value={7}>1 week</option>
+            <option value={14}>2 weeks</option>
+            <option value={21}>3 weeks</option>
+          </select>
+          <label className="text-xs font-medium text-slate-600 ml-1">or a date:</label>
+          <input type="date" value={date} max={isoDaysAgo(0)} onChange={(e) => { setWeek('last'); setDate(e.target.value); }}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm" />
+          <span className="text-[11px] text-slate-400 w-full sm:w-auto">Cycle length = how long a pipe has to hit its target before it counts as missed.</span>
         </div>
       </div>
 

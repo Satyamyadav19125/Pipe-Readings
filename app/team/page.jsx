@@ -33,19 +33,22 @@ class TabErrorBoundary extends Component {
 
 export default function TeamPage() {
   const [tab, setTab] = useState('missed'); // Assignment view opens first
-  const [isAdmin, setIsAdmin] = useState(null); // null = still checking
+  const [role, setRole] = useState(null); // null = still checking
 
   useEffect(() => {
     fetch('/api/auth/check')
       .then((r) => r.json())
-      .then((d) => setIsAdmin(d.user?.role === 'admin'))
-      .catch(() => setIsAdmin(false));
+      .then((d) => setRole(d.user?.role || 'none'))
+      .catch(() => setRole('none'));
   }, []);
 
+  const isAdmin = role === 'admin';
+  const isGuest = role === 'guest';
   const tabs = [
     { key: 'missed', label: '📌 Assignment' },
-    ...(isAdmin ? [{ key: 'assignments', label: '👥 Team' }] : []),
-    { key: 'tasks', label: '✅ Tasks' },
+    // Team roster is visible to admins and (read-only, demo) guests.
+    ...((isAdmin || isGuest) ? [{ key: 'assignments', label: '👥 Team' }] : []),
+    ...(isGuest ? [] : [{ key: 'tasks', label: '✅ Tasks' }]),
   ];
 
   return (
@@ -64,8 +67,8 @@ export default function TeamPage() {
       <TabErrorBoundary>
         {/* All panes stay mounted — switching is instant, no refetch. */}
         <div className={tab === 'missed' ? '' : 'hidden'}><MissedPage /></div>
-        {isAdmin && <div className={tab === 'assignments' ? '' : 'hidden'}><AssignmentsPage /></div>}
-        <div className={tab === 'tasks' ? '' : 'hidden'}><TasksPage /></div>
+        {(isAdmin || isGuest) && <div className={tab === 'assignments' ? '' : 'hidden'}><AssignmentsPage /></div>}
+        {!isGuest && <div className={tab === 'tasks' ? '' : 'hidden'}><TasksPage /></div>}
       </TabErrorBoundary>
     </div>
   );

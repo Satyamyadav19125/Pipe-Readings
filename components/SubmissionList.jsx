@@ -290,7 +290,8 @@ function DuplicateCompare({ current, others, canVerify }) {
 // (raw Kobo untouched); the edited values flow through the whole tool. This is
 // how you fix a submission where something other than the reading is wrong.
 const EDITABLE = [
-  ['group_1/Date', 'Date', 'date'], ['group_1/name', 'Surveyor name', 'name'],
+  ['group_1/Date', 'Date', 'date'], ['group_1/Start', 'Start time', 'startTime'],
+  ['End_time', 'End time', 'endTime'], ['group_1/name', 'Surveyor name', 'name'],
   ['group_1/village', 'Village', 'village'], ['group_2/farm', 'Farm ID', 'farm'],
   ['group_2/pipes', 'Pipe ID', 'serial'], ['group_2/Outside_validation', 'Outside height (mm)', 'validation'],
   ['group_2/Readings_mm', 'Water level (mm)', 'reading'], ['group_2/Location', 'GPS (lat lng)', 'location'],

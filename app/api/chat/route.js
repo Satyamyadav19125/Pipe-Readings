@@ -12,7 +12,8 @@ export const dynamic = 'force-dynamic';
 //   'dm:<name>'    -> any admin, OR the assistant whose name === <name>
 function canAccess(user, channel) {
   if (!channel) return false;
-  if (user.role === 'guest') return false; // guests have no chat access
+  // Guests may READ the group channel only (never DMs). Sending is blocked in POST.
+  if (user.role === 'guest') return channel === 'group';
   if (channel === 'group') return true;
   if (channel.startsWith('dm:')) {
     const who = channel.slice(3);
@@ -42,6 +43,8 @@ export async function GET(request) {
 export async function POST(request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
+  // Guests are read-only — they can see the group chat but not post to it.
+  if (user.role === 'guest') return NextResponse.json({ error: 'Guests cannot send messages' }, { status: 403 });
 
   let body;
   try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }

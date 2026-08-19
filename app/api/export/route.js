@@ -105,13 +105,15 @@ export async function GET(request) {
       };
 
       if (scope === 'all') {
+        // One sheet per Submissions tab, in the same order the tabs appear.
         addSummary(live);
-        addSheet('All readings', toLabeledRows(sortByTime(subs)));
-        addSheet('Clean', toCleanLabeledRows(sortByTime(clean)));
-        addSheet('Corrected (old vs new)', toCorrectedChangeRows(sortByTime(corrected), rawById));
-        addSheet('Dead', toLabeledRows(sortByTime(dead)));
+        addSheet('All', toLabeledRows(sortByTime(subs)));
+        addSheet('Raw', toLabeledRows(sortByTime(rawRows)));
         addSheet('Red flags', labeledFor('flagged', sortByTime(flagged)));
-        if (duplicates.length) addSheet('Duplicates', toLabeledRows(sortByTime(duplicates)));
+        addSheet('Duplicate', toLabeledRows(sortByTime(duplicates)));
+        addSheet('Dead', toLabeledRows(sortByTime(dead)));
+        addSheet('Corrected (old vs new)', toCorrectedChangeRows(sortByTime(corrected), rawById));
+        addSheet('Clean', toCleanLabeledRows(sortByTime(clean)));
       } else if (scope === 'corrected') {
         addSummary(corrected);
         addSheet('Corrected (old vs new)', toCorrectedChangeRows(selected, rawById));

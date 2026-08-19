@@ -131,7 +131,8 @@ export default function ChatPage() {
       if (u.role === 'admin') {
         const people = Array.isArray(asg?.assignments) ? asg.assignments : [];
         for (const p of people) if (p.person) list.push({ id: `dm:${p.person}`, label: p.person, icon: '👤' });
-      } else {
+      } else if (u.role !== 'guest') {
+        // Guests only ever see the group channel (read-only); no private DMs.
         list.push({ id: `dm:${u.name}`, label: 'Admins (private)', icon: '🛡️' });
       }
       setChannels(list);
@@ -658,6 +659,11 @@ export default function ChatPage() {
           </div>
         )}
 
+        {user?.role === 'guest' ? (
+          <div className="border-t border-slate-100 p-3 bg-slate-50 text-center text-xs text-slate-500 shrink-0">
+            👁️ Read-only demo — you can see the team chat but can’t send messages.
+          </div>
+        ) : (
         <div className="border-t border-slate-100 p-2 flex items-end gap-1.5 bg-white shrink-0">
           <button onClick={() => { setShowPlus(!showPlus); setShowEmoji(false); }} title="Attach"
             className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-xl transition ${showPlus ? 'bg-brand-100 text-brand-700 rotate-45' : 'text-slate-500 hover:bg-slate-100'}`}>+</button>
@@ -682,6 +688,7 @@ export default function ChatPage() {
           <input ref={audioRef} type="file" accept="audio/*" onChange={(e) => sendRawFile(e, 'audio')} className="hidden" />
           <input ref={docRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" onChange={(e) => sendRawFile(e, 'file')} className="hidden" />
         </div>
+        )}
       </div>
 
       {lightbox && (

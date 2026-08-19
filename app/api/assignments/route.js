@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAssignments, saveAssignments, isDbConfigured } from '@/lib/db';
 import { isAdmin, getCurrentUser } from '@/lib/auth';
+import { getDemoAssignments } from '@/lib/demoData';
 import { revalidatePath } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
@@ -19,13 +20,12 @@ export async function GET() {
     );
   }
   try {
+    // Guest (read-only viewer): a safe DEMO team — never real people/credentials.
+    if (user.role === 'guest') {
+      return NextResponse.json({ assignments: getDemoAssignments() });
+    }
     const list = await getAssignments();
     if (user.role === 'admin') return NextResponse.json({ assignments: list });
-    // Guest (read-only viewer): the whole team is visible, but passwords are
-    // stripped so no login credentials ever reach the browser.
-    if (user.role === 'guest') {
-      return NextResponse.json({ assignments: list.map(({ password, ...rest }) => rest) });
-    }
     const own = list
       .filter((a) => a.person === user.name)
       .map(({ password, ...rest }) => rest);

@@ -110,9 +110,14 @@ export default async function SubmissionsPage({ searchParams }) {
     });
   }
 
-  const sorted = [...filtered].sort(
-    (a, b) => readingDate(b).getTime() - readingDate(a).getTime()
-  );
+  // Sort: by SUBMISSION time (default) so a form uploaded today shows at the
+  // top even if its form date is old; or by the FORM date if chosen.
+  const sortKey = (sp.sort || 'submitted');
+  const sorted = [...filtered].sort((a, b) => (
+    sortKey === 'formdate'
+      ? readingDate(b).getTime() - readingDate(a).getTime()
+      : new Date(b._submission_time).getTime() - new Date(a._submission_time).getTime()
+  ));
   // Guests only ever see a small sample so no bulk data leaves the tool.
   const shown = guestCap ? sorted.slice(0, guestCap) : sorted;
   const filteredFlagCount = canSeeFlags ? shown.filter((s) => isRed(s._id)).length : 0;
@@ -174,6 +179,13 @@ export default async function SubmissionsPage({ searchParams }) {
         </>
       )}
 
+      {/* Sort order — works on every tab */}
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-slate-500">Sort by:</span>
+        <SortLink name="submitted" current={sortKey} sp={sp}>🆕 Submission date</SortLink>
+        <SortLink name="formdate" current={sortKey} sp={sp}>📅 Form date</SortLink>
+      </div>
+
       <SubmissionList
         submissions={shown}
         flags={allFlags}
@@ -183,6 +195,19 @@ export default async function SubmissionsPage({ searchParams }) {
         duplicates={canViewAdmin ? dup.map : {}}
       />
     </div>
+  );
+}
+
+function SortLink({ name, current, sp, children }) {
+  const active = (current || 'submitted') === name;
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp || {})) {
+    if (k !== 'sort' && v) params.set(k, Array.isArray(v) ? v[0] : String(v));
+  }
+  if (name !== 'submitted') params.set('sort', name);
+  const href = `/submissions${params.toString() ? '?' + params.toString() : ''}`;
+  return (
+    <a href={href} className={`px-2.5 py-1 rounded-full border transition ${active ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'}`}>{children}</a>
   );
 }
 

@@ -18,6 +18,17 @@ export async function GET(request) {
     return new Response('Missing url parameter', { status: 400 });
   }
 
+  // Demo (guest) photos are inline data: URIs — decode and return them directly.
+  if (target.startsWith('data:')) {
+    const m = /^data:([^;,]+)(;base64)?,(.*)$/s.exec(target);
+    if (m) {
+      const ct = m[1] || 'application/octet-stream';
+      const body = m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]), 'utf8');
+      return new Response(body, { status: 200, headers: { 'content-type': ct, 'cache-control': 'public, max-age=3600' } });
+    }
+    return new Response('Bad data URI', { status: 400 });
+  }
+
   let parsed;
   try {
     parsed = new URL(target);

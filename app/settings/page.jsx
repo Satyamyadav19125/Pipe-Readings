@@ -527,8 +527,8 @@ function Toggle({ label, checked, onChange }) {
 // ---- Guest viewer + landing page controls ----
 const GUEST_SECTIONS = [
   ['overview', 'Overview'], ['submissions', 'Submissions'], ['map', 'Map'],
-  ['usage', 'Water level'], ['assignment', 'Assignment / readings'], ['team', 'Team (no passwords)'],
-  ['redFlags', 'Red-flag info'], ['charts', 'Charts'],
+  ['usage', 'Water level'], ['assignment', 'Assignment / readings'], ['team', 'Team (demo)'],
+  ['chat', 'Chat (read-only)'], ['redFlags', 'Red-flag info'], ['charts', 'Charts'],
 ];
 function GuestPanel({ settings, origin, updateGuest, updateGuestShow, updateGuestLanding, updateLandingControls }) {
   const g = settings.guest || {};
@@ -599,6 +599,10 @@ function GuestPanel({ settings, origin, updateGuest, updateGuestShow, updateGues
           <Toggle label="Show university names" checked={lc.showUniversities !== false} onChange={(v) => updateLandingControls('showUniversities', v)} />
           <Toggle label="Show research blurb" checked={lc.showResearchLine !== false} onChange={(v) => updateLandingControls('showResearchLine', v)} />
           <Toggle label="Show feature cards" checked={lc.showFeatures !== false} onChange={(v) => updateLandingControls('showFeatures', v)} />
+        </div>
+        <div className="border-t border-slate-100 pt-2 mt-1">
+          <Toggle label="🔒 Show the GENERIC landing to everyone who isn't logged in" checked={lc.publicGeneric === true} onChange={(v) => updateLandingControls('publicGeneric', v)} />
+          <p className="text-[11px] text-slate-500 mt-1">Turn this on so that even the root URL (not just the <b>/view</b> link) hides your branding from anyone without a login — the safest way to share the guest link. (A web address itself can never be hidden, but this stops it revealing anything.)</p>
         </div>
         <p className="text-[11px] text-slate-500">The contact section on the normal landing is controlled in <b>📬 Contact info → Show on landing page</b>.</p>
       </div>

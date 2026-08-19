@@ -37,6 +37,7 @@ export default function MobileNav({ user, formUploadUrl }) {
     { href: '/usage', label: 'Water level', icon: '💧', k: 'usage' },
     { href: '/map', label: 'Map', icon: '🗺️', k: 'map' },
     { href: '/team', label: 'Assignment', icon: '👥', k: 'assignment' },
+    { href: '/chat', label: 'Chat', icon: '💬', k: 'chat' },
   ].filter((l) => guestShow[l.k] !== false);
 
   const links = !loggedIn ? []
