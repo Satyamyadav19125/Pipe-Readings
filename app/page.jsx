@@ -17,14 +17,11 @@ export const dynamic = 'force-dynamic';
 export default async function HomePage() {
   const currentUser = await getCurrentUser();
   if (!currentUser) {
-    // Show the generic (brand-free) landing to everyone not logged in when the
-    // admin turned it on OR whenever guest access is enabled — so someone who
-    // strips "/view" off the shared link still can't see your real branding.
+    // The root landing is your FULL branded page. Guests get the generic one at
+    // /view instead. (The admin can still force the root to be generic with the
+    // "publicGeneric" toggle, but it's OFF by default so your own page is full.)
     let generic = false;
-    try {
-      const s = await getSettings();
-      generic = s?.landingControls?.publicGeneric === true || s?.guest?.enabled === true;
-    } catch {}
+    try { generic = (await getSettings())?.landingControls?.publicGeneric === true; } catch {}
     return <Landing variant={generic ? 'guest' : 'normal'} />;
   }
   const isAdmin = currentUser.role === 'admin';

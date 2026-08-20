@@ -10,9 +10,15 @@ const CLUSTER_CSS = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCl
 const CLUSTER_CSS2 = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css';
 const CLUSTER_JS = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js';
 const GLOBE_JS = 'https://unpkg.com/globe.gl';
-const GLOBE_EARTH = 'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg';
 const GLOBE_BUMP = 'https://unpkg.com/three-globe/example/img/earth-topology.png';
 const GLOBE_SKY = 'https://unpkg.com/three-globe/example/img/night-sky.png';
+// A reliable 3D Earth texture per map style (real OSM tiles on a globe are
+// unstable across globe.gl builds, so we use full-sphere textures instead).
+const GLOBE_TEX = {
+  satellite: 'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg',
+  street: 'https://unpkg.com/three-globe/example/img/earth-night.jpg',
+  topo: 'https://unpkg.com/three-globe/example/img/earth-topology.png',
+};
 
 const TILE_LAYERS = {
   street: { name: '🗺️ Street', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap', maxNativeZoom: 19 },
@@ -65,14 +71,6 @@ function loadCss(id, href) {
   const link = document.createElement('link');
   link.id = id; link.rel = 'stylesheet'; link.href = href;
   document.head.appendChild(link);
-}
-
-// Tile URL for the 3D globe, matching the flat map's layer choice, so the user
-// can spin the Earth in Street / Satellite / Topo just like the 2D map.
-function globeTileUrl(layer, x, y, l) {
-  if (layer === 'satellite') return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${l}/${y}/${x}`;
-  if (layer === 'topo') return `https://a.tile.opentopomap.org/${l}/${x}/${y}.png`;
-  return `https://a.tile.openstreetmap.org/${l}/${x}/${y}.png`;
 }
 
 function popupHtml(p, { showFlagFilter, colorMode, irrigation, allowKoboLink }) {
@@ -168,7 +166,11 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
     // fresh cluster group
     if (clusterRef.current) { map.removeLayer(clusterRef.current); clusterRef.current = null; }
     const useCluster = typeof L.markerClusterGroup === 'function';
-    const group = useCluster ? L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 45, spiderfyOnMaxZoom: true }) : L.layerGroup();
+    // disableClusteringAtZoom: once you zoom in, every individual pin shows (so
+    // "zoom in and the data is actually there").
+    const group = useCluster
+      ? L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 45, spiderfyOnMaxZoom: true, disableClusteringAtZoom: 15, showCoverageOnHover: false })
+      : L.layerGroup();
     const built = [];
     for (const p of points) {
       let pin = 'blue';
@@ -237,10 +239,19 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
 
   useEffect(() => { if (viewMode !== 'globe') applyView(); /* eslint-disable-next-line */ }, [filterMode, viewMode, irrFilter, colorMode]);
 
-  // ---- Globe (Google-Earth-style) mode ----
+  function globeShown() {
+    return (mapRef.current?._pipeMarkers || []).filter(matchesFilter).map((i) => i.point);
+  }
+
+  // ---- Globe (Google-Earth-style) mode: CREATE once on entering globe mode. ----
   useEffect(() => {
     if (viewMode !== 'globe') {
-      if (globeInstRef.current) { try { globeInstRef.current._destructor?.(); } catch {} globeInstRef.current = null; if (globeRef.current) globeRef.current.innerHTML = ''; }
+      if (globeInstRef.current) {
+        if (globeInstRef.current._onResize) window.removeEventListener('resize', globeInstRef.current._onResize);
+        try { globeInstRef.current._destructor?.(); } catch {}
+        globeInstRef.current = null;
+        if (globeRef.current) globeRef.current.innerHTML = '';
+      }
       return;
     }
     let cancelled = false;
@@ -250,41 +261,46 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
         await loadScript('globe-gl-js', GLOBE_JS);
         const Globe = window.Globe;
         if (cancelled || !globeRef.current || !Globe) { if (!Globe) setGlobeError('Could not load the 3D globe library.'); return; }
+        // Destroy any previous instance first so we never stack two globes.
+        if (globeInstRef.current) { try { globeInstRef.current._destructor?.(); } catch {} }
         globeRef.current.innerHTML = '';
-        const shown = (mapRef.current?._pipeMarkers || []).filter(matchesFilter).map((i) => i.point);
+        const shown = globeShown();
         const g = Globe()(globeRef.current)
           .backgroundImageUrl(GLOBE_SKY)          // starfield
-          .pointsData(shown)
+          .globeImageUrl(GLOBE_TEX[layer] || GLOBE_TEX.satellite)
+          .bumpImageUrl(GLOBE_BUMP)
           .pointLat((d) => d.lat).pointLng((d) => d.lng)
           .pointColor((d) => (showFlagFilter && d.isFlagged) ? '#ef4444' : '#38bdf8')
-          .pointAltitude(0.008).pointRadius(0.28)
+          .pointAltitude(0.01).pointRadius(0.3)
           .pointLabel((d) => `<div style="font:12px system-ui;color:#fff;background:rgba(0,0,0,.7);padding:4px 6px;border-radius:4px">${escapeHtml(d.village)} · ${escapeHtml(d.serial)}<br/>${escapeHtml(d.reading)} mm</div>`)
+          .pointsData(shown)
           .width(globeRef.current.clientWidth).height(globeRef.current.clientHeight);
-        // Real map tiles on the globe if this build supports it; else a texture.
-        if (typeof g.globeTileEngineUrl === 'function') {
-          g.globeTileEngineUrl((x, y, l) => globeTileUrl(layer, x, y, l));
-        } else {
-          g.globeImageUrl(GLOBE_EARTH).bumpImageUrl(GLOBE_BUMP);
-        }
         globeInstRef.current = g;
-        // Fly to the data, then let the user zoom out to see the whole earth + stars.
         if (shown.length) {
           const lat = shown.reduce((a, b) => a + b.lat, 0) / shown.length;
           const lng = shown.reduce((a, b) => a + b.lng, 0) / shown.length;
-          setTimeout(() => { try { g.pointOfView({ lat, lng, altitude: 1.6 }, 1200); } catch {} }, 200);
+          setTimeout(() => { try { g.pointOfView({ lat, lng, altitude: 1.7 }, 1000); } catch {} }, 250);
         }
-        g.controls().autoRotate = false;
-        const onResize = () => { try { g.width(globeRef.current.clientWidth).height(globeRef.current.clientHeight); } catch {} };
+        try { g.controls().autoRotate = false; } catch {}
+        const onResize = () => { try { if (globeRef.current) g.width(globeRef.current.clientWidth).height(globeRef.current.clientHeight); } catch {} };
         window.addEventListener('resize', onResize);
         g._onResize = onResize;
+        setTimeout(onResize, 300);
       } catch (e) { if (!cancelled) setGlobeError('The 3D globe failed to load. Check your connection and try again.'); }
     })();
-    return () => {
-      cancelled = true;
-      if (globeInstRef.current?._onResize) window.removeEventListener('resize', globeInstRef.current._onResize);
-    };
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, points, colorMode, filterMode, irrFilter]);
+  }, [viewMode]);
+
+  // ---- Update the globe's POINTS when the data/filter changes (no rebuild). ----
+  useEffect(() => {
+    const g = globeInstRef.current;
+    if (!g || viewMode !== 'globe') return;
+    try {
+      g.pointColor((d) => (showFlagFilter && d.isFlagged) ? '#ef4444' : '#38bdf8').pointsData(globeShown());
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [points, filterMode, colorMode, irrFilter, viewMode]);
 
   useEffect(() => {
     const L = typeof window !== 'undefined' ? window.L : null;
@@ -294,10 +310,10 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
       tileLayerRef.current = L.tileLayer(conf.url, { maxZoom: 19, maxNativeZoom: conf.maxNativeZoom || 19, attribution: conf.attribution }).addTo(mapRef.current);
       attachStreetFallback(L, mapRef.current, tileLayerRef);
     }
-    // Also swap the globe's tiles live when the layer changes.
+    // Also swap the globe's texture live when the layer changes.
     const g = globeInstRef.current;
-    if (g && viewMode === 'globe' && typeof g.globeTileEngineUrl === 'function') {
-      try { g.globeTileEngineUrl((x, y, l) => globeTileUrl(layer, x, y, l)); } catch {}
+    if (g && viewMode === 'globe') {
+      try { g.globeImageUrl(GLOBE_TEX[layer] || GLOBE_TEX.satellite); } catch {}
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layer]);
@@ -328,7 +344,7 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
 
   return (
     <div className="relative">
-      {showFlagFilter && colorMode === 'flags' && !showGlobe && (
+      {showFlagFilter && colorMode === 'flags' && (
         <div className="absolute top-2 left-12 sm:left-14 z-[450] bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs" {...stopMapGestures}>
           <FilterBtn active={filterMode === 'all'} onClick={() => setFilterMode('all')}>All ({points.length})</FilterBtn>
           <FilterBtn active={filterMode === 'clean'} onClick={() => setFilterMode('clean')} color="text-sky-700">● Clean ({cleanCount})</FilterBtn>
@@ -337,7 +353,7 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
         </div>
       )}
 
-      <div className={`absolute ${showFlagFilter && !showGlobe ? 'top-12' : 'top-2'} left-12 sm:left-14 z-[450] flex gap-1 flex-wrap`} {...stopMapGestures}>
+      <div className={`absolute ${showFlagFilter ? 'top-12' : 'top-2'} left-12 sm:left-14 z-[450] flex gap-1 flex-wrap`} {...stopMapGestures}>
         <div className="bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs">
           <FilterBtn active={viewMode === 'pins'} onClick={() => setViewMode('pins')}>📍 Pins</FilterBtn>
           <FilterBtn active={viewMode === 'heat'} onClick={() => setViewMode('heat')} color="text-orange-700">🔥 Heat</FilterBtn>

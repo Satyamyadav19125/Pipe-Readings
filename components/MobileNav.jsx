@@ -119,9 +119,13 @@ export default function MobileNav({ user, formUploadUrl }) {
           {loggedIn ? (
             <>
               {isGuest ? (
-                <span className="px-3 py-1.5 rounded bg-white/15 text-sm font-medium flex items-center gap-1.5 max-w-[140px]">
-                  <span>👁️</span><span className="hidden sm:inline truncate">Guest viewer</span>
-                </span>
+                <Link href="/profile" title="Guest profile"
+                  className="px-3 py-1.5 rounded bg-white/15 hover:bg-white/25 text-sm font-medium flex items-center gap-1.5 transition max-w-[140px]">
+                  {user?.photo
+                    ? <img src={user.photo} alt="" className="w-5 h-5 rounded-full object-cover border border-white/50" />
+                    : <span>👁️</span>}
+                  <span className="hidden sm:inline truncate">Guest viewer</span>
+                </Link>
               ) : (
                 <Link href="/profile" title="Open my profile"
                   className="px-3 py-1.5 rounded bg-white/15 hover:bg-white/25 text-sm font-medium flex items-center gap-1.5 transition max-w-[120px]">
@@ -154,13 +158,16 @@ export default function MobileNav({ user, formUploadUrl }) {
         <div className="xl:hidden fixed inset-0 z-[1100] bg-black/40" onClick={() => setOpen(false)}>
           <div className="absolute top-14 right-0 w-72 bg-white shadow-xl rounded-bl-2xl overflow-hidden max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             {isGuest ? (
-              <div className="px-4 py-3 bg-gradient-to-r from-brand-50 to-field-50 text-brand-900 text-sm border-b flex items-center gap-2">
-                <span className="w-8 h-8 rounded-full bg-brand-200 flex items-center justify-center text-base">👁️</span>
-                <div>
-                  <div className="font-semibold leading-tight">Guest viewer</div>
-                  <div className="text-[10px] text-slate-500">Read-only demo access</div>
+              <Link href="/profile" onClick={() => setOpen(false)} className="px-4 py-3 bg-gradient-to-r from-brand-50 to-field-50 text-brand-900 text-sm border-b flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-full bg-brand-200 flex items-center justify-center text-base">👁️</span>
+                  <div>
+                    <div className="font-semibold leading-tight">Guest viewer</div>
+                    <div className="text-[10px] text-slate-500">Read-only demo · tap for profile</div>
+                  </div>
                 </div>
-              </div>
+                <span className="text-slate-400">›</span>
+              </Link>
             ) : (
               <Link href="/profile" onClick={() => setOpen(false)} className="px-4 py-3 bg-gradient-to-r from-brand-50 to-field-50 text-brand-900 text-sm border-b flex items-center justify-between">
                 <div className="flex items-center gap-2">

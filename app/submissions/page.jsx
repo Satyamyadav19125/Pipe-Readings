@@ -79,12 +79,14 @@ export default async function SubmissionsPage({ searchParams }) {
   //  • Clean      — live, not-flagged readings (your fixes land here)
   const isDead = (s) => s._correction && s._correction.field === 'dead';
   const isCorrected = (s) => s._correction && s._correction.field !== 'dead';
+  const isRaw = (s) => !s._correction; // untouched by an admin (no edit, not dead)
   const dup = sameDayDuplicates(scopedAll);
   const isDuplicate = (s) => dup.ids.has(String(s._id));
 
-  // All and Raw both show EVERYTHING, so they share the full total — Raw can
-  // never look smaller than Clean now.
+  // All = every submission (the grand total). Raw = only the UNTOUCHED forms
+  // (no correction, not dead), so it is a genuine subset SMALLER than All.
   const totalCount = filtered0.length;
+  const rawCount = filtered0.filter(isRaw).length;
   const correctedCount = canViewAdmin ? filtered0.filter(isCorrected).length : 0;
   const deadCount = canViewAdmin ? filtered0.filter(isDead).length : 0;
   const duplicateCount = canViewAdmin ? filtered0.filter(isDuplicate).length : 0;
@@ -93,7 +95,8 @@ export default async function SubmissionsPage({ searchParams }) {
 
   let filtered;
   if (flagFilter === 'raw') {
-    filtered = filtered0.map(toRaw); // same rows as All, original Kobo values
+    // Untouched forms only, shown exactly as Kobo stored them.
+    filtered = filtered0.filter(isRaw).map(toRaw);
   } else {
     filtered = filtered0.filter((s) => {
       if (flagFilter === 'all') return true;             // everything, incl. dead
@@ -156,7 +159,7 @@ export default async function SubmissionsPage({ searchParams }) {
             {canViewAdmin ? (
               <>
                 <FlagChip name="all" current={flagFilter} sp={sp}>All ({totalCount})</FlagChip>
-                <FlagChip name="raw" current={flagFilter} sp={sp}>🗂️ Raw ({totalCount})</FlagChip>
+                <FlagChip name="raw" current={flagFilter} sp={sp}>🗂️ Raw ({rawCount})</FlagChip>
                 <FlagChip name="flagged" current={flagFilter} sp={sp} danger>🚩 Red flags ({redCount})</FlagChip>
                 {duplicateCount > 0 && <FlagChip name="duplicates" current={flagFilter} sp={sp}>👯 Duplicate ({duplicateCount})</FlagChip>}
                 <FlagChip name="dead" current={flagFilter} sp={sp}>🗑️ Dead ({deadCount})</FlagChip>
@@ -173,7 +176,7 @@ export default async function SubmissionsPage({ searchParams }) {
           </div>
           {isAdmin && (
             <p className="text-[11px] text-slate-500 -mt-1">
-              <b>All ({totalCount})</b> = every submission (this IS the grand total, dead included) · <b>Raw</b> = the same rows shown exactly as Kobo stored them · the rest are <b>subsets</b> that overlap, so they don’t add up to All (a reading can be both Corrected and Clean). <b>Red flags</b> = flagged · <b>Duplicate</b> = same pipe 2+×/day · <b>Dead</b> = removed · <b>Corrected</b> = you edited it · <b>Clean</b> = trustworthy data.
+              <b>All ({totalCount})</b> = every submission (the grand total, dead included). <b>Raw ({rawCount})</b> = only the <i>untouched</i> forms, exactly as Kobo stored them. The rest overlap (a reading can be both Corrected and Clean) so they don’t sum to All. <b>Clean</b> can be larger than Raw because it also includes forms you corrected.
             </p>
           )}
         </>

@@ -31,18 +31,21 @@ export default function ProfilePage() {
   }, []);
 
   const isAdmin = profile?.role === 'admin';
+  const isGuest = profile?.role === 'guest';
+  const nameEditable = isAdmin || isGuest; // admins and the demo guest can set the name
+  const canChangePassword = !isAdmin && !isGuest; // only surveyors change their password here
 
   async function save(e) {
     e.preventDefault();
     setError(null); setMessage(null);
-    if (!isAdmin && form.password && form.password !== form.confirmPassword) {
+    if (canChangePassword && form.password && form.password !== form.confirmPassword) {
       setError('New password and confirmation do not match.');
       return;
     }
     setSaving(true);
     const body = { phone: form.phone, email: form.email, photo: form.photo, bio: form.bio };
-    if (isAdmin) body.name = form.name;
-    if (!isAdmin && form.password) body.password = form.password;
+    if (nameEditable) body.name = form.name;
+    if (canChangePassword && form.password) body.password = form.password;
     const res = await fetch('/api/profile', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -56,14 +59,6 @@ export default function ProfilePage() {
   }
 
   if (loading) return <p className="text-slate-500">Loading…</p>;
-  // Guests are anonymous — there is no profile to edit.
-  if (profile?.role === 'guest') return (
-    <div className="max-w-lg mx-auto bg-white rounded-xl shadow p-6 text-center">
-      <div className="text-4xl mb-2">👁️</div>
-      <h1 className="text-lg font-semibold">Guest viewer</h1>
-      <p className="text-sm text-slate-500 mt-1">You’re browsing a read-only demo. There’s no profile to edit.</p>
-    </div>
-  );
   if (error && !profile) return (
     <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
       {error} · <a href="/login" className="underline">Log in</a>
@@ -74,13 +69,13 @@ export default function ProfilePage() {
     <div className="max-w-2xl mx-auto space-y-4">
       <div className="bg-white rounded-xl shadow p-5 sm:p-6">
         <div className="mb-4">
-          <h1 className="text-xl font-bold">{isAdmin ? (form.name || 'Admin') : profile.name}</h1>
+          <h1 className="text-xl font-bold">{nameEditable ? (form.name || (isGuest ? 'Guest Viewer' : 'Admin')) : profile.name}</h1>
           <p className="text-xs text-slate-500">
-            {isAdmin ? 'Administrator' : `Surveyor · ${profile.villages?.length || 0} villages assigned`}
+            {isGuest ? '👁️ Guest viewer · read-only demo profile' : isAdmin ? 'Administrator' : `Surveyor · ${profile.villages?.length || 0} villages assigned`}
           </p>
         </div>
 
-        {!isAdmin && (profile.villages || []).length > 0 && (
+        {!isAdmin && !isGuest && (profile.villages || []).length > 0 && (
           <div className="mb-4 flex flex-wrap gap-1.5">
             {profile.villages.map((v) => (
               <span key={v} className="px-2.5 py-0.5 text-xs rounded-full bg-field-50 text-field-900 border border-field-200">🏘️ {v}</span>
@@ -92,9 +87,9 @@ export default function ProfilePage() {
         {error && <div className="bg-red-50 border border-red-200 text-red-800 rounded p-2 text-sm mb-3">{error}</div>}
 
         <form onSubmit={save} className="space-y-3">
-          {isAdmin && (
+          {nameEditable && (
             <Field label="Display name">
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Satyam Yadav" className="profile-input" />
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={isGuest ? 'e.g. Demo Viewer' : 'e.g. Satyam Yadav'} className="profile-input" />
             </Field>
           )}
 
@@ -112,7 +107,7 @@ export default function ProfilePage() {
             </Field>
           </div>
 
-          {!isAdmin && (
+          {canChangePassword && (
             <details className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
               <summary className="cursor-pointer text-sm font-medium">🔑 Change password</summary>
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">

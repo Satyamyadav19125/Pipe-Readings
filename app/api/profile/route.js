@@ -1,19 +1,33 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { getAssignments, saveAssignments, saveAdminProfile } from '@/lib/db';
+import { getAssignments, saveAssignments, saveAdminProfile, getSettings, saveGuestProfile } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
+  // Guests get the shared, editable demo profile from settings.
+  if (user.role === 'guest') {
+    let gp = {};
+    try { gp = (await getSettings())?.guest?.profile || {}; } catch {}
+    return NextResponse.json({ profile: { role: 'guest', name: gp.name || 'Guest Viewer', photo: gp.photo || '', bio: gp.bio || '', phone: gp.phone || '', email: gp.email || '' } });
+  }
   return NextResponse.json({ profile: user });
 }
 
 export async function PUT(request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
-  if (user.role === 'guest') return NextResponse.json({ error: 'Guests have no profile.' }, { status: 403 });
+
+  // Guests can edit the shared demo profile (no credentials involved).
+  if (user.role === 'guest') {
+    let g;
+    try { g = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
+    try { await saveGuestProfile({ name: g.name, photo: g.photo, bio: g.bio, phone: g.phone, email: g.email }); }
+    catch (e) { return NextResponse.json({ error: `Could not save: ${e.message}` }, { status: 500 }); }
+    return NextResponse.json({ ok: true, passwordChanged: false });
+  }
 
   let body;
   try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
