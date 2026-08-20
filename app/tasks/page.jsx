@@ -43,7 +43,7 @@ export default function TasksPage() {
       setUser(u);
       if (u) {
         setTasks(Array.isArray(t && t.tasks) ? t.tasks : []);
-        if (u.role === 'admin') {
+        if (u.role === 'admin' || u.role === 'guest') {
           const arr = Array.isArray(list) ? list : (list && list.assignments) || [];
           const names = arr.map((p) => p.person).filter(Boolean);
           setPeople(names);
@@ -132,9 +132,10 @@ export default function TasksPage() {
   }
 
   const isAdmin = user.role === 'admin';
+  const isGuest = user.role === 'guest';
 
   // ============================ SURVEYOR VIEW ============================
-  if (!isAdmin) {
+  if (!isAdmin && !isGuest) {
     const open = tasks.filter((t) => !t.done);
     const done = tasks.filter((t) => t.done);
     const shown = tab === 'open' ? open : tab === 'done' ? done : tasks;
@@ -198,10 +199,11 @@ export default function TasksPage() {
       <h1 className="text-2xl font-bold text-gray-800">Tasks</h1>
       <p className="mt-1 text-sm text-gray-500">Assign extra work to field assistants and track what is done. {open.length} open, {tasks.length} total.</p>
 
+      {isGuest && <p className="mt-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-500">👁️ Read-only demo — this is how admins assign tasks to surveyors. You can look but not create or change tasks.</p>}
       {error ? <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
 
       {/* create task */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+      <div className={`mt-4 rounded-xl border border-gray-200 bg-white p-4 ${isGuest ? 'opacity-70 pointer-events-none' : ''}`}>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">New task</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
@@ -238,7 +240,7 @@ export default function TasksPage() {
           </div>
         </div>
         <div className="mt-3">
-          <button onClick={handleCreate} disabled={saving} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-60">{saving ? 'Saving…' : 'Create task'}</button>
+          <button onClick={handleCreate} disabled={saving || isGuest} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-60">{saving ? 'Saving…' : 'Create task'}</button>
         </div>
       </div>
 
@@ -253,7 +255,7 @@ export default function TasksPage() {
               <div className="space-y-2">
                 {grouped[name].map((t) => (
                   <div key={t.id} className={`flex items-start gap-3 rounded-xl border bg-white p-3 ${t.done ? 'border-green-200' : 'border-gray-200'}`}>
-                    <button onClick={() => toggleDone(t, !t.done)} disabled={busyId === t.id} className={`mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full border-2 ${t.done ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 text-transparent hover:border-sky-500'}`} aria-label="toggle done">✓</button>
+                    <button onClick={() => toggleDone(t, !t.done)} disabled={busyId === t.id || isGuest} className={`mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full border-2 ${t.done ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 text-transparent hover:border-sky-500'}`} aria-label="toggle done">✓</button>
                     <div className="min-w-0 flex-1">
                       <p className={`font-medium ${t.done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{t.title}</p>
                       {t.notes ? <p className="mt-0.5 text-sm text-gray-500">{t.notes}</p> : null}
@@ -262,7 +264,7 @@ export default function TasksPage() {
                         {t.done && t.doneAt ? <span className="text-green-600">Done {new Date(t.doneAt).toLocaleDateString()}{t.doneBy ? ` by ${t.doneBy}` : ''}</span> : null}
                       </div>
                     </div>
-                    <button onClick={() => removeTask(t)} disabled={busyId === t.id} className="flex-none rounded-lg px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50">Delete</button>
+                    {!isGuest && <button onClick={() => removeTask(t)} disabled={busyId === t.id} className="flex-none rounded-lg px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50">Delete</button>}
                   </div>
                 ))}
               </div>

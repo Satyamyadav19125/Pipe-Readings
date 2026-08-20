@@ -56,6 +56,14 @@ export default function ProfilePage() {
   }
 
   if (loading) return <p className="text-slate-500">Loading…</p>;
+  // Guests are anonymous — there is no profile to edit.
+  if (profile?.role === 'guest') return (
+    <div className="max-w-lg mx-auto bg-white rounded-xl shadow p-6 text-center">
+      <div className="text-4xl mb-2">👁️</div>
+      <h1 className="text-lg font-semibold">Guest viewer</h1>
+      <p className="text-sm text-slate-500 mt-1">You’re browsing a read-only demo. There’s no profile to edit.</p>
+    </div>
+  );
   if (error && !profile) return (
     <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
       {error} · <a href="/login" className="underline">Log in</a>

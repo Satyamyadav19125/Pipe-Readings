@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
+import { getDemoChat } from '@/lib/demoData';
 import {
   getMessages, sendMessage, editMessage, deleteMessage,
   reactToMessage, updateLiveLocation, endLiveLocation,
@@ -34,6 +35,9 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const channel = searchParams.get('channel') || 'group';
   if (!canAccess(user, channel)) return NextResponse.json({ error: 'No access to this chat' }, { status: 403 });
+
+  // Guests see a fake conversation, never the real team's messages.
+  if (user.role === 'guest') return NextResponse.json({ messages: getDemoChat(), me: 'guest' });
 
   const me = senderIdOf(user);
   const messages = await getMessages(channel, me);

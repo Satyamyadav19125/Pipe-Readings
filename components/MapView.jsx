@@ -67,6 +67,14 @@ function loadCss(id, href) {
   document.head.appendChild(link);
 }
 
+// Tile URL for the 3D globe, matching the flat map's layer choice, so the user
+// can spin the Earth in Street / Satellite / Topo just like the 2D map.
+function globeTileUrl(layer, x, y, l) {
+  if (layer === 'satellite') return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${l}/${y}/${x}`;
+  if (layer === 'topo') return `https://a.tile.opentopomap.org/${l}/${x}/${y}.png`;
+  return `https://a.tile.openstreetmap.org/${l}/${x}/${y}.png`;
+}
+
 function popupHtml(p, { showFlagFilter, colorMode, irrigation, allowKoboLink }) {
   const dir = `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
   const showRed = showFlagFilter && p.isFlagged;
@@ -221,7 +229,9 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
     }
 
     if (shownItems.length > 0) {
-      try { map.fitBounds(L.featureGroup(shownItems.map((i) => i.marker)).getBounds().pad(0.2), { maxZoom: 16 }); } catch {}
+      // Cap the zoom so we never land deeper than the satellite/topo tiles go
+      // (which is what showed "Map data not available" over rural fields).
+      try { map.fitBounds(L.featureGroup(shownItems.map((i) => i.marker)).getBounds().pad(0.25), { maxZoom: 13 }); } catch {}
     }
   }
 
@@ -243,8 +253,6 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
         globeRef.current.innerHTML = '';
         const shown = (mapRef.current?._pipeMarkers || []).filter(matchesFilter).map((i) => i.point);
         const g = Globe()(globeRef.current)
-          .globeImageUrl(GLOBE_EARTH)
-          .bumpImageUrl(GLOBE_BUMP)
           .backgroundImageUrl(GLOBE_SKY)          // starfield
           .pointsData(shown)
           .pointLat((d) => d.lat).pointLng((d) => d.lng)
@@ -252,6 +260,12 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
           .pointAltitude(0.008).pointRadius(0.28)
           .pointLabel((d) => `<div style="font:12px system-ui;color:#fff;background:rgba(0,0,0,.7);padding:4px 6px;border-radius:4px">${escapeHtml(d.village)} · ${escapeHtml(d.serial)}<br/>${escapeHtml(d.reading)} mm</div>`)
           .width(globeRef.current.clientWidth).height(globeRef.current.clientHeight);
+        // Real map tiles on the globe if this build supports it; else a texture.
+        if (typeof g.globeTileEngineUrl === 'function') {
+          g.globeTileEngineUrl((x, y, l) => globeTileUrl(layer, x, y, l));
+        } else {
+          g.globeImageUrl(GLOBE_EARTH).bumpImageUrl(GLOBE_BUMP);
+        }
         globeInstRef.current = g;
         // Fly to the data, then let the user zoom out to see the whole earth + stars.
         if (shown.length) {
@@ -274,11 +288,18 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
 
   useEffect(() => {
     const L = typeof window !== 'undefined' ? window.L : null;
-    if (!L || !mapRef.current) return;
-    if (tileLayerRef.current) mapRef.current.removeLayer(tileLayerRef.current);
-    const conf = TILE_LAYERS[layer];
-    tileLayerRef.current = L.tileLayer(conf.url, { maxZoom: 19, maxNativeZoom: conf.maxNativeZoom || 19, attribution: conf.attribution }).addTo(mapRef.current);
-    attachStreetFallback(L, mapRef.current, tileLayerRef);
+    if (L && mapRef.current) {
+      if (tileLayerRef.current) mapRef.current.removeLayer(tileLayerRef.current);
+      const conf = TILE_LAYERS[layer];
+      tileLayerRef.current = L.tileLayer(conf.url, { maxZoom: 19, maxNativeZoom: conf.maxNativeZoom || 19, attribution: conf.attribution }).addTo(mapRef.current);
+      attachStreetFallback(L, mapRef.current, tileLayerRef);
+    }
+    // Also swap the globe's tiles live when the layer changes.
+    const g = globeInstRef.current;
+    if (g && viewMode === 'globe' && typeof g.globeTileEngineUrl === 'function') {
+      try { g.globeTileEngineUrl((x, y, l) => globeTileUrl(layer, x, y, l)); } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layer]);
 
   function goToMyLocation() {
@@ -339,16 +360,15 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
         </div>
       )}
 
-      {!showGlobe && (
-        <div className="absolute top-2 right-2 z-[450] bg-white rounded-lg shadow flex flex-col p-1 gap-0.5" {...stopMapGestures}>
-          {Object.entries(TILE_LAYERS).map(([k, v]) => (
-            <button key={k} onClick={() => setLayer(k)}
-              className={`text-[11px] sm:text-xs px-2 py-1 rounded text-left whitespace-nowrap ${layer === k ? 'bg-brand-100 text-brand-900 font-semibold' : 'hover:bg-slate-100'}`}>
-              {v.name}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Layer picker — shown for both the flat map AND the globe. */}
+      <div className="absolute top-2 right-2 z-[450] bg-white rounded-lg shadow flex flex-col p-1 gap-0.5" {...stopMapGestures}>
+        {Object.entries(TILE_LAYERS).map(([k, v]) => (
+          <button key={k} onClick={() => setLayer(k)}
+            className={`text-[11px] sm:text-xs px-2 py-1 rounded text-left whitespace-nowrap ${layer === k ? 'bg-brand-100 text-brand-900 font-semibold' : 'hover:bg-slate-100'}`}>
+            {v.name}
+          </button>
+        ))}
+      </div>
 
       {!showGlobe && (
         <button onClick={goToMyLocation} title="Go to my location"

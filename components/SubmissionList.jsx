@@ -296,6 +296,28 @@ const EDITABLE = [
   ['group_2/pipes', 'Pipe ID', 'serial'], ['group_2/Outside_validation', 'Outside height (mm)', 'validation'],
   ['group_2/Readings_mm', 'Water level (mm)', 'reading'], ['group_2/Location', 'GPS (lat lng)', 'location'],
 ];
+// Which input control each field uses in the editor.
+function fieldKind(logical) {
+  if (logical === 'date') return 'date';
+  if (logical === 'startTime' || logical === 'endTime') return 'time';
+  if (logical === 'name') return 'surveyor';
+  if (logical === 'reading' || logical === 'validation') return 'number';
+  return 'text';
+}
+// Kobo time "16:00:00.000+05:30" <-> the <input type=time> "16:00" value.
+function toTimeInput(v) {
+  const m = /(\d{1,2}):(\d{2})/.exec(String(v || ''));
+  return m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
+}
+function fromTimeInput(hhmm) {
+  return hhmm ? `${hhmm}:00.000+05:30` : '';
+}
+// Kobo date is already YYYY-MM-DD (strip any time part just in case).
+function toDateInput(v) {
+  const m = /(\d{4}-\d{2}-\d{2})/.exec(String(v || ''));
+  return m ? m[1] : '';
+}
+
 function FullFormEditor({ submission }) {
   const existing = submission._correction && submission._correction.field === 'fields'
     ? (submission._correction.fields || {}) : {};
@@ -304,6 +326,7 @@ function FullFormEditor({ submission }) {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [surveyors, setSurveyors] = useState([]);
   const router = useRouter();
 
   function currentVal(path, logical) {
@@ -315,6 +338,8 @@ function FullFormEditor({ submission }) {
     const seed = {};
     for (const [path, , logical] of EDITABLE) seed[path] = String(currentVal(path, logical) ?? '');
     setVals(seed); setOpen(true); setErr('');
+    // Load the list of surveyor names for the dropdown.
+    fetch('/api/surveyors').then((r) => r.json()).then((d) => setSurveyors(Array.isArray(d.surveyors) ? d.surveyors : [])).catch(() => {});
   }
   async function save() {
     // Only send fields that actually changed from the raw value.
@@ -368,11 +393,31 @@ function FullFormEditor({ submission }) {
         {EDITABLE.map(([path, label, logical]) => {
           const raw = String(submission[path] ?? getField(submission, logical) ?? '');
           const changed = String(vals[path] ?? '') !== raw;
+          const kind = fieldKind(logical);
+          const cls = `w-full px-2 py-1.5 rounded border text-sm ${changed ? 'border-amber-400 bg-amber-50' : 'border-slate-300'}`;
+          let control;
+          if (kind === 'date') {
+            control = <input type="date" value={toDateInput(vals[path])} onChange={(e) => setVals({ ...vals, [path]: e.target.value })} className={cls} />;
+          } else if (kind === 'time') {
+            control = <input type="time" value={toTimeInput(vals[path])} onChange={(e) => setVals({ ...vals, [path]: fromTimeInput(e.target.value) })} className={cls} />;
+          } else if (kind === 'surveyor') {
+            const cur = String(vals[path] ?? '');
+            const opts = Array.from(new Set([cur, ...surveyors].filter(Boolean)));
+            control = (
+              <select value={cur} onChange={(e) => setVals({ ...vals, [path]: e.target.value })} className={cls}>
+                {!cur && <option value="">— choose surveyor —</option>}
+                {opts.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            );
+          } else if (kind === 'number') {
+            control = <input type="number" value={vals[path] ?? ''} onChange={(e) => setVals({ ...vals, [path]: e.target.value })} className={cls} />;
+          } else {
+            control = <input value={vals[path] ?? ''} onChange={(e) => setVals({ ...vals, [path]: e.target.value })} className={cls} />;
+          }
           return (
             <label key={path} className="block">
               <span className="text-[11px] text-slate-500">{label}{changed && <span className="text-amber-600"> ●</span>}</span>
-              <input value={vals[path] ?? ''} onChange={(e) => setVals({ ...vals, [path]: e.target.value })}
-                className={`w-full px-2 py-1.5 rounded border text-sm ${changed ? 'border-amber-400 bg-amber-50' : 'border-slate-300'}`} />
+              {control}
             </label>
           );
         })}

@@ -22,6 +22,7 @@ async function channelsFor(user) {
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
+  if (user.role === 'guest') return NextResponse.json({ counts: {}, total: 0 });
   const channels = await channelsFor(user);
   const data = await getUnreadCounts(senderIdOf(user), channels);
   return NextResponse.json(data);

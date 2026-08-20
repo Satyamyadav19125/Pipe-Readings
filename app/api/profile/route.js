@@ -13,6 +13,7 @@ export async function GET() {
 export async function PUT(request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
+  if (user.role === 'guest') return NextResponse.json({ error: 'Guests have no profile.' }, { status: 403 });
 
   let body;
   try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }

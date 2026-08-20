@@ -19,11 +19,15 @@ export async function GET(request) {
   }
 
   // Demo (guest) photos are inline data: URIs — decode and return them directly.
+  // Handles any params (e.g. ;utf8, ;charset=..., ;base64) before the comma.
   if (target.startsWith('data:')) {
-    const m = /^data:([^;,]+)(;base64)?,(.*)$/s.exec(target);
-    if (m) {
-      const ct = m[1] || 'application/octet-stream';
-      const body = m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]), 'utf8');
+    const comma = target.indexOf(',');
+    if (comma > 0) {
+      const meta = target.slice(5, comma);            // e.g. "image/svg+xml;utf8"
+      const data = target.slice(comma + 1);
+      const ct = meta.split(';')[0] || 'application/octet-stream';
+      const isB64 = /;base64/i.test(meta);
+      const body = isB64 ? Buffer.from(data, 'base64') : Buffer.from(decodeURIComponent(data), 'utf8');
       return new Response(body, { status: 200, headers: { 'content-type': ct, 'cache-control': 'public, max-age=3600' } });
     }
     return new Response('Bad data URI', { status: 400 });

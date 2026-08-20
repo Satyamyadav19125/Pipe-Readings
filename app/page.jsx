@@ -17,10 +17,14 @@ export const dynamic = 'force-dynamic';
 export default async function HomePage() {
   const currentUser = await getCurrentUser();
   if (!currentUser) {
-    // Optionally show the generic landing to everyone not logged in, so the
-    // shareable guest link can't be stripped back to reveal real branding.
+    // Show the generic (brand-free) landing to everyone not logged in when the
+    // admin turned it on OR whenever guest access is enabled — so someone who
+    // strips "/view" off the shared link still can't see your real branding.
     let generic = false;
-    try { generic = (await getSettings())?.landingControls?.publicGeneric === true; } catch {}
+    try {
+      const s = await getSettings();
+      generic = s?.landingControls?.publicGeneric === true || s?.guest?.enabled === true;
+    } catch {}
     return <Landing variant={generic ? 'guest' : 'normal'} />;
   }
   const isAdmin = currentUser.role === 'admin';
@@ -99,7 +103,7 @@ export default async function HomePage() {
   const farmRows = [...allFarms]
     .map((farm) => ({ farm, count: farmCounts[farm] || 0 }))
     .sort((a, b) => b.count - a.count);
-  const uniqueVillages = !isAdmin
+  const uniqueVillages = !canViewAdmin
     ? (currentUser.villages || []).length
     : new Set([...Object.keys(villageCounts).filter((v) => v !== 'Unknown'), ...(master.ok ? master.villages : [])]).size;
   const uniqueSurveyors = Object.keys(surveyorCounts).length;
@@ -133,7 +137,7 @@ export default async function HomePage() {
   // pipes that have never been read at all.
   let pipesTotal = meters.filter((m) => !isOffPipe(m.serial)).length;
   if (master.ok && master.pipes.length > 0) {
-    const allowedV = !isAdmin
+    const allowedV = !canViewAdmin
       ? new Set((currentUser.villages || []).map((v) => String(v).trim().toLowerCase()))
       : null;
     const serialSet = new Set(meters.filter((m) => !isOffPipe(m.serial)).map((m) => m.serial));

@@ -48,7 +48,7 @@ export default function TeamPage() {
     { key: 'missed', label: '📌 Assignment' },
     // Team roster is visible to admins and (read-only, demo) guests.
     ...((isAdmin || isGuest) ? [{ key: 'assignments', label: '👥 Team' }] : []),
-    ...(isGuest ? [] : [{ key: 'tasks', label: '✅ Tasks' }]),
+    { key: 'tasks', label: '✅ Tasks' },
   ];
 
   return (
@@ -68,7 +68,7 @@ export default function TeamPage() {
         {/* All panes stay mounted — switching is instant, no refetch. */}
         <div className={tab === 'missed' ? '' : 'hidden'}><MissedPage /></div>
         {(isAdmin || isGuest) && <div className={tab === 'assignments' ? '' : 'hidden'}><AssignmentsPage /></div>}
-        {!isGuest && <div className={tab === 'tasks' ? '' : 'hidden'}><TasksPage /></div>}
+        <div className={tab === 'tasks' ? '' : 'hidden'}><TasksPage /></div>
       </TabErrorBoundary>
     </div>
   );

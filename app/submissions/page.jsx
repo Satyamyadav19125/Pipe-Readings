@@ -173,7 +173,7 @@ export default async function SubmissionsPage({ searchParams }) {
           </div>
           {isAdmin && (
             <p className="text-[11px] text-slate-500 -mt-1">
-              <b>All</b> = everything · <b>Raw</b> = exactly as Kobo stored it · <b>Red flags</b> = flagged for review · <b>Duplicate</b> = same pipe read 2+×/day · <b>Dead</b> = mistakes you removed · <b>Corrected</b> = you edited it · <b>Clean</b> = trustworthy data (your fixes included).
+              <b>All ({totalCount})</b> = every submission (this IS the grand total, dead included) · <b>Raw</b> = the same rows shown exactly as Kobo stored them · the rest are <b>subsets</b> that overlap, so they don’t add up to All (a reading can be both Corrected and Clean). <b>Red flags</b> = flagged · <b>Duplicate</b> = same pipe 2+×/day · <b>Dead</b> = removed · <b>Corrected</b> = you edited it · <b>Clean</b> = trustworthy data.
             </p>
           )}
         </>

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
+import { getDemoTasks } from '@/lib/demoData';
 import { getTasks, getTasksForPerson, createTask, updateTask, deleteTask } from '@/lib/tasks';
 
 export const dynamic = 'force-dynamic';
@@ -8,6 +9,9 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
+
+  // Guests see fake demo tasks (read-only).
+  if (user.role === 'guest') return NextResponse.json({ tasks: getDemoTasks(), role: 'guest' });
 
   if (user.role === 'admin') {
     const tasks = await getTasks();
