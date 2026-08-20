@@ -6,23 +6,13 @@ import { IRRIGATION_META } from '@/lib/irrigation';
 const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
 const LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
 const LEAFLET_HEAT_JS = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js';
-const CLUSTER_CSS = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css';
-const CLUSTER_CSS2 = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css';
-const CLUSTER_JS = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js';
-const GLOBE_JS = 'https://unpkg.com/globe.gl';
-const GLOBE_BUMP = 'https://unpkg.com/three-globe/example/img/earth-topology.png';
-const GLOBE_SKY = 'https://unpkg.com/three-globe/example/img/night-sky.png';
-// A reliable 3D Earth texture per map style (real OSM tiles on a globe are
-// unstable across globe.gl builds, so we use full-sphere textures instead).
-const GLOBE_TEX = {
-  satellite: 'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg',
-  street: 'https://unpkg.com/three-globe/example/img/earth-night.jpg',
-  topo: 'https://unpkg.com/three-globe/example/img/earth-topology.png',
-};
 
 const TILE_LAYERS = {
+  // maxNativeZoom caps the deepest tile actually fetched; Leaflet UPSCALES past
+  // it instead of asking for tiles that don't exist (which showed "map data not
+  // available"). Esri imagery over rural areas often stops around z17-18.
   street: { name: '🗺️ Street', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap', maxNativeZoom: 19 },
-  satellite: { name: '🛰️ Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Tiles © Esri', maxNativeZoom: 19 },
+  satellite: { name: '🛰️ Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Tiles © Esri', maxNativeZoom: 17 },
   topo: { name: '⛰️ Topo', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attribution: '© OpenTopoMap', maxNativeZoom: 17 },
 };
 
@@ -38,9 +28,7 @@ function escapeHtml(s) {
   return String(s ?? '—').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// Coloured teardrop pin icons (the original look), served from a CDN and cached
-// by the browser after the first load. Marker clustering keeps 1000+ of them
-// fast because only visible clusters are drawn.
+// Coloured teardrop pin icons, served from a CDN and cached after the first load.
 const MARKER_SHADOW = 'https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-shadow.png';
 function pinIcon(L, color) {
   return L.icon({
@@ -108,39 +96,33 @@ function popupHtml(p, { showFlagFilter, colorMode, irrigation, allowKoboLink }) 
 
 export default function MapView({ points = [], showFlagFilter = true, irrigation = null, allowKoboLink = true }) {
   const containerRef = useRef(null);
-  const globeRef = useRef(null);
   const mapRef = useRef(null);
   const tileLayerRef = useRef(null);
-  const clusterRef = useRef(null);     // marker cluster group (pins)
+  const layerGroupRef = useRef(null);   // holds every pin (no clustering)
   const heatRef = useRef(null);
   const heatTapRef = useRef([]);
   const myMarkerRef = useRef(null);
-  const globeInstRef = useRef(null);
   const [ready, setReady] = useState(false);
-  const [layer, setLayer] = useState('street');
+  const [layer, setLayer] = useState('satellite');
   const [filterMode, setFilterMode] = useState('all');
-  const [viewMode, setViewMode] = useState('pins');  // pins | heat | globe
-  const [colorMode, setColorMode] = useState('flags');
+  const [viewMode, setViewMode] = useState('pins');   // pins | heat
+  const [colorMode, setColorMode] = useState('flags'); // flags | irrigation
   const [irrFilter, setIrrFilter] = useState('all');
   const [locating, setLocating] = useState(false);
-  const [globeError, setGlobeError] = useState('');
 
   const flaggedCount = points.filter((p) => p.isFlagged).length;
   const cleanCount = points.length - flaggedCount;
   const dupCount = points.filter((p) => p.isDuplicate).length;
   const irrCount = (st) => points.filter((p) => p.isLatest && p.irrStatus === st).length;
 
-  // ---- Create the Leaflet map ONCE (never destroyed on filter/points change,
-  //      which is what left the map blank before). ----
+  // ---- Create the map ONCE. ----
   useEffect(() => {
     let cancelled = false;
     loadCss('leaflet-css', LEAFLET_CSS);
-    loadCss('cluster-css', CLUSTER_CSS);
-    loadCss('cluster-css2', CLUSTER_CSS2);
     (async () => {
       try {
         await loadScript('leaflet-js', LEAFLET_JS);
-        await Promise.all([loadScript('leaflet-heat-js', LEAFLET_HEAT_JS), loadScript('leaflet-cluster-js', CLUSTER_JS)]);
+        await loadScript('leaflet-heat-js', LEAFLET_HEAT_JS);
         const L = window.L;
         if (cancelled || !containerRef.current || !L || mapRef.current) return;
         const map = L.map(containerRef.current, { zoomControl: true }).setView([30.9, 75.8], 9);
@@ -157,20 +139,12 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---- Rebuild markers whenever the data / colouring changes (map persists). ----
+  // ---- Rebuild markers whenever the data / colouring changes. ----
   useEffect(() => {
     const map = mapRef.current;
     const L = typeof window !== 'undefined' ? window.L : null;
     if (!map || !L || !ready) return;
     const icons = { red: pinIcon(L, 'red'), blue: pinIcon(L, 'blue'), orange: pinIcon(L, 'orange'), grey: pinIcon(L, 'grey') };
-    // fresh cluster group
-    if (clusterRef.current) { map.removeLayer(clusterRef.current); clusterRef.current = null; }
-    const useCluster = typeof L.markerClusterGroup === 'function';
-    // disableClusteringAtZoom: once you zoom in, every individual pin shows (so
-    // "zoom in and the data is actually there").
-    const group = useCluster
-      ? L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 45, spiderfyOnMaxZoom: true, disableClusteringAtZoom: 15, showCoverageOnHover: false })
-      : L.layerGroup();
     const built = [];
     for (const p of points) {
       let pin = 'blue';
@@ -180,8 +154,6 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
       m.bindPopup(popupHtml(p, { showFlagFilter, colorMode, irrigation, allowKoboLink }));
       built.push({ marker: m, isFlagged: !!p.isFlagged, lat: p.lat, lng: p.lng, point: p });
     }
-    clusterRef.current = group;
-    // markersRef holds the records; applyView decides which to actually show
     map._pipeMarkers = built;
     applyView(map);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,21 +176,19 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
     const L = typeof window !== 'undefined' ? window.L : null;
     if (!map || !L) return;
     const all = map._pipeMarkers || [];
-    // clear heat + taps + cluster
+    // clear heat + taps + the pin layer
     if (heatRef.current) { map.removeLayer(heatRef.current); heatRef.current = null; }
     for (const t of heatTapRef.current) map.removeLayer(t);
     heatTapRef.current = [];
-    if (clusterRef.current && map.hasLayer(clusterRef.current)) map.removeLayer(clusterRef.current);
+    if (layerGroupRef.current) { map.removeLayer(layerGroupRef.current); layerGroupRef.current = null; }
 
     const shownItems = all.filter(matchesFilter);
 
     if (viewMode === 'pins') {
-      const grp = clusterRef.current;
-      if (grp) {
-        grp.clearLayers?.();
-        for (const it of shownItems) grp.addLayer ? grp.addLayer(it.marker) : it.marker.addTo(map);
-        map.addLayer(grp);
-      }
+      // Every pin, drawn directly (no clustering).
+      const grp = L.layerGroup(shownItems.map((i) => i.marker));
+      grp.addTo(map);
+      layerGroupRef.current = grp;
     } else if (viewMode === 'heat' && typeof L.heatLayer === 'function') {
       const heatPts = shownItems.map((i) => [i.lat, i.lng, i.isFlagged ? 1.0 : 0.5]);
       if (heatPts.length) heatRef.current = L.heatLayer(heatPts, { radius: 28, blur: 18, maxZoom: 17, minOpacity: 0.35 }).addTo(map);
@@ -231,91 +201,19 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
     }
 
     if (shownItems.length > 0) {
-      // Cap the zoom so we never land deeper than the satellite/topo tiles go
-      // (which is what showed "Map data not available" over rural fields).
       try { map.fitBounds(L.featureGroup(shownItems.map((i) => i.marker)).getBounds().pad(0.25), { maxZoom: 13 }); } catch {}
     }
   }
 
-  useEffect(() => { if (viewMode !== 'globe') applyView(); /* eslint-disable-next-line */ }, [filterMode, viewMode, irrFilter, colorMode]);
-
-  function globeShown() {
-    return (mapRef.current?._pipeMarkers || []).filter(matchesFilter).map((i) => i.point);
-  }
-
-  // ---- Globe (Google-Earth-style) mode: CREATE once on entering globe mode. ----
-  useEffect(() => {
-    if (viewMode !== 'globe') {
-      if (globeInstRef.current) {
-        if (globeInstRef.current._onResize) window.removeEventListener('resize', globeInstRef.current._onResize);
-        try { globeInstRef.current._destructor?.(); } catch {}
-        globeInstRef.current = null;
-        if (globeRef.current) globeRef.current.innerHTML = '';
-      }
-      return;
-    }
-    let cancelled = false;
-    setGlobeError('');
-    (async () => {
-      try {
-        await loadScript('globe-gl-js', GLOBE_JS);
-        const Globe = window.Globe;
-        if (cancelled || !globeRef.current || !Globe) { if (!Globe) setGlobeError('Could not load the 3D globe library.'); return; }
-        // Destroy any previous instance first so we never stack two globes.
-        if (globeInstRef.current) { try { globeInstRef.current._destructor?.(); } catch {} }
-        globeRef.current.innerHTML = '';
-        const shown = globeShown();
-        const g = Globe()(globeRef.current)
-          .backgroundImageUrl(GLOBE_SKY)          // starfield
-          .globeImageUrl(GLOBE_TEX[layer] || GLOBE_TEX.satellite)
-          .bumpImageUrl(GLOBE_BUMP)
-          .pointLat((d) => d.lat).pointLng((d) => d.lng)
-          .pointColor((d) => (showFlagFilter && d.isFlagged) ? '#ef4444' : '#38bdf8')
-          .pointAltitude(0.01).pointRadius(0.3)
-          .pointLabel((d) => `<div style="font:12px system-ui;color:#fff;background:rgba(0,0,0,.7);padding:4px 6px;border-radius:4px">${escapeHtml(d.village)} · ${escapeHtml(d.serial)}<br/>${escapeHtml(d.reading)} mm</div>`)
-          .pointsData(shown)
-          .width(globeRef.current.clientWidth).height(globeRef.current.clientHeight);
-        globeInstRef.current = g;
-        if (shown.length) {
-          const lat = shown.reduce((a, b) => a + b.lat, 0) / shown.length;
-          const lng = shown.reduce((a, b) => a + b.lng, 0) / shown.length;
-          setTimeout(() => { try { g.pointOfView({ lat, lng, altitude: 1.7 }, 1000); } catch {} }, 250);
-        }
-        try { g.controls().autoRotate = false; } catch {}
-        const onResize = () => { try { if (globeRef.current) g.width(globeRef.current.clientWidth).height(globeRef.current.clientHeight); } catch {} };
-        window.addEventListener('resize', onResize);
-        g._onResize = onResize;
-        setTimeout(onResize, 300);
-      } catch (e) { if (!cancelled) setGlobeError('The 3D globe failed to load. Check your connection and try again.'); }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode]);
-
-  // ---- Update the globe's POINTS when the data/filter changes (no rebuild). ----
-  useEffect(() => {
-    const g = globeInstRef.current;
-    if (!g || viewMode !== 'globe') return;
-    try {
-      g.pointColor((d) => (showFlagFilter && d.isFlagged) ? '#ef4444' : '#38bdf8').pointsData(globeShown());
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, filterMode, colorMode, irrFilter, viewMode]);
+  useEffect(() => { applyView(); /* eslint-disable-next-line */ }, [filterMode, viewMode, irrFilter, colorMode]);
 
   useEffect(() => {
     const L = typeof window !== 'undefined' ? window.L : null;
-    if (L && mapRef.current) {
-      if (tileLayerRef.current) mapRef.current.removeLayer(tileLayerRef.current);
-      const conf = TILE_LAYERS[layer];
-      tileLayerRef.current = L.tileLayer(conf.url, { maxZoom: 19, maxNativeZoom: conf.maxNativeZoom || 19, attribution: conf.attribution }).addTo(mapRef.current);
-      attachStreetFallback(L, mapRef.current, tileLayerRef);
-    }
-    // Also swap the globe's texture live when the layer changes.
-    const g = globeInstRef.current;
-    if (g && viewMode === 'globe') {
-      try { g.globeImageUrl(GLOBE_TEX[layer] || GLOBE_TEX.satellite); } catch {}
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!L || !mapRef.current) return;
+    if (tileLayerRef.current) mapRef.current.removeLayer(tileLayerRef.current);
+    const conf = TILE_LAYERS[layer];
+    tileLayerRef.current = L.tileLayer(conf.url, { maxZoom: 19, maxNativeZoom: conf.maxNativeZoom || 19, attribution: conf.attribution }).addTo(mapRef.current);
+    attachStreetFallback(L, mapRef.current, tileLayerRef);
   }, [layer]);
 
   function goToMyLocation() {
@@ -340,7 +238,8 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
     );
   }
 
-  const showGlobe = viewMode === 'globe';
+  // Clicking an irrigation status auto-switches to irrigation colouring.
+  function pickIrr(st) { setColorMode('irrigation'); setIrrFilter(st); }
 
   return (
     <div className="relative">
@@ -357,9 +256,8 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
         <div className="bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs">
           <FilterBtn active={viewMode === 'pins'} onClick={() => setViewMode('pins')}>📍 Pins</FilterBtn>
           <FilterBtn active={viewMode === 'heat'} onClick={() => setViewMode('heat')} color="text-orange-700">🔥 Heat</FilterBtn>
-          <FilterBtn active={viewMode === 'globe'} onClick={() => setViewMode('globe')} color="text-indigo-700">🌍 Globe</FilterBtn>
         </div>
-        {irrigation && !showGlobe && (
+        {irrigation && (
           <div className="bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs">
             <FilterBtn active={colorMode === 'flags'} onClick={() => setColorMode('flags')}>🚩 Flags</FilterBtn>
             <FilterBtn active={colorMode === 'irrigation'} onClick={() => setColorMode('irrigation')} color="text-emerald-700">💧 Irrigation</FilterBtn>
@@ -367,16 +265,16 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
         )}
       </div>
 
-      {irrigation && colorMode === 'irrigation' && !showGlobe && (
-        <div className="absolute top-[5.5rem] left-12 sm:left-14 z-[450] bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs flex-wrap" {...stopMapGestures}>
-          <FilterBtn active={irrFilter === 'all'} onClick={() => setIrrFilter('all')}>All pipes</FilterBtn>
-          <FilterBtn active={irrFilter === 'dry'} onClick={() => setIrrFilter('dry')} color="text-red-700">🔴 Irrigate ({irrCount('dry')})</FilterBtn>
-          <FilterBtn active={irrFilter === 'low'} onClick={() => setIrrFilter('low')} color="text-amber-700">🟠 Low ({irrCount('low')})</FilterBtn>
-          <FilterBtn active={irrFilter === 'wet'} onClick={() => setIrrFilter('wet')} color="text-blue-700">🔵 Wet ({irrCount('wet')})</FilterBtn>
+      {/* Irrigation status filters — ALWAYS visible when irrigation is on. */}
+      {irrigation && (
+        <div className={`absolute ${showFlagFilter ? 'top-[5.5rem]' : 'top-12'} left-12 sm:left-14 z-[450] bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs flex-wrap`} {...stopMapGestures}>
+          <FilterBtn active={colorMode === 'irrigation' && irrFilter === 'all'} onClick={() => pickIrr('all')} color="text-emerald-700">💧 All pipes</FilterBtn>
+          <FilterBtn active={colorMode === 'irrigation' && irrFilter === 'dry'} onClick={() => pickIrr('dry')} color="text-red-700">🔴 Irrigate ({irrCount('dry')})</FilterBtn>
+          <FilterBtn active={colorMode === 'irrigation' && irrFilter === 'low'} onClick={() => pickIrr('low')} color="text-amber-700">🟠 Low ({irrCount('low')})</FilterBtn>
+          <FilterBtn active={colorMode === 'irrigation' && irrFilter === 'wet'} onClick={() => pickIrr('wet')} color="text-blue-700">🔵 Wet ({irrCount('wet')})</FilterBtn>
         </div>
       )}
 
-      {/* Layer picker — shown for both the flat map AND the globe. */}
       <div className="absolute top-2 right-2 z-[450] bg-white rounded-lg shadow flex flex-col p-1 gap-0.5" {...stopMapGestures}>
         {Object.entries(TILE_LAYERS).map(([k, v]) => (
           <button key={k} onClick={() => setLayer(k)}
@@ -386,25 +284,12 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
         ))}
       </div>
 
-      {!showGlobe && (
-        <button onClick={goToMyLocation} title="Go to my location"
-          className="absolute bottom-6 right-2 z-[450] w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-xl hover:bg-slate-50 active:scale-95 transition" onDoubleClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-          {locating ? <span className="animate-spin text-base">⏳</span> : '🎯'}
-        </button>
-      )}
+      <button onClick={goToMyLocation} title="Go to my location"
+        className="absolute bottom-6 right-2 z-[450] w-11 h-11 bg-white rounded-full shadow-lg flex items-center justify-center text-xl hover:bg-slate-50 active:scale-95 transition" onDoubleClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+        {locating ? <span className="animate-spin text-base">⏳</span> : '🎯'}
+      </button>
 
-      {/* Leaflet map (hidden while the globe is showing so both keep their size) */}
-      <div ref={containerRef} style={{ height: '70vh', minHeight: 420, width: '100%', display: showGlobe ? 'none' : 'block' }} />
-
-      {/* Globe */}
-      {showGlobe && (
-        <div className="relative" style={{ height: '70vh', minHeight: 420, width: '100%', background: '#000' }}>
-          <div ref={globeRef} style={{ width: '100%', height: '100%' }} />
-          {globeError
-            ? <div className="absolute inset-0 flex items-center justify-center text-center text-sm text-white/80 p-6">{globeError}</div>
-            : <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-[11px] text-white/70 bg-black/40 px-3 py-1 rounded-full pointer-events-none">🌍 Drag to spin · scroll/pinch to zoom out to the whole Earth</div>}
-        </div>
-      )}
+      <div ref={containerRef} style={{ height: '70vh', minHeight: 420, width: '100%' }} />
     </div>
   );
 }
