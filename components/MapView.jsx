@@ -28,15 +28,10 @@ function escapeHtml(s) {
   return String(s ?? '—').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// Coloured teardrop pin icons, served from a CDN and cached after the first load.
-const MARKER_SHADOW = 'https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-shadow.png';
-function pinIcon(L, color) {
-  return L.icon({
-    iconUrl: `https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-2x-${color}.png`,
-    shadowUrl: MARKER_SHADOW,
-    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
-  });
-}
+// Pin colours as hex. Markers are drawn on ONE <canvas> (preferCanvas) instead
+// of 1000+ downloaded PNG icons + DOM nodes — the big speed win that stops the
+// map lagging/crashing with the whole dataset pinned.
+const PIN_COLORS = { red: '#dc2626', blue: '#2563eb', orange: '#f59e0b', grey: '#94a3b8' };
 
 function loadScript(id, src) {
   return new Promise((resolve, reject) => {
@@ -98,6 +93,7 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const tileLayerRef = useRef(null);
+  const canvasRef = useRef(null);       // shared canvas renderer for all pins
   const layerGroupRef = useRef(null);   // holds every pin (no clustering)
   const heatRef = useRef(null);
   const heatTapRef = useRef([]);
@@ -125,8 +121,9 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
         await loadScript('leaflet-heat-js', LEAFLET_HEAT_JS);
         const L = window.L;
         if (cancelled || !containerRef.current || !L || mapRef.current) return;
-        const map = L.map(containerRef.current, { zoomControl: true }).setView([30.9, 75.8], 9);
+        const map = L.map(containerRef.current, { zoomControl: true, preferCanvas: true }).setView([30.9, 75.8], 9);
         mapRef.current = map;
+        canvasRef.current = L.canvas({ padding: 0.5 });
         const conf = TILE_LAYERS[layer];
         tileLayerRef.current = L.tileLayer(conf.url, { maxZoom: 19, maxNativeZoom: conf.maxNativeZoom || 19, attribution: conf.attribution }).addTo(map);
         attachStreetFallback(L, map, tileLayerRef);
@@ -144,13 +141,18 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
     const map = mapRef.current;
     const L = typeof window !== 'undefined' ? window.L : null;
     if (!map || !L || !ready) return;
-    const icons = { red: pinIcon(L, 'red'), blue: pinIcon(L, 'blue'), orange: pinIcon(L, 'orange'), grey: pinIcon(L, 'grey') };
+    const renderer = canvasRef.current || L.canvas({ padding: 0.5 });
     const built = [];
     for (const p of points) {
-      let pin = 'blue';
-      if (colorMode === 'irrigation' && irrigation) pin = IRRIGATION_META[p.irrStatus || 'na'].pin || 'grey';
-      else if (showFlagFilter && p.isFlagged) pin = 'red';
-      const m = L.marker([p.lat, p.lng], { icon: icons[pin] || icons.blue });
+      let key = 'blue';
+      if (colorMode === 'irrigation' && irrigation) key = IRRIGATION_META[p.irrStatus || 'na'].pin || 'grey';
+      else if (showFlagFilter && p.isFlagged) key = 'red';
+      const flaggedPin = showFlagFilter && p.isFlagged;
+      const m = L.circleMarker([p.lat, p.lng], {
+        renderer,
+        radius: flaggedPin ? 7 : 5,
+        color: '#ffffff', weight: 1.5, fillColor: PIN_COLORS[key] || PIN_COLORS.blue, fillOpacity: 0.95,
+      });
       m.bindPopup(popupHtml(p, { showFlagFilter, colorMode, irrigation, allowKoboLink }));
       built.push({ marker: m, isFlagged: !!p.isFlagged, lat: p.lat, lng: p.lng, point: p });
     }
@@ -238,9 +240,6 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
     );
   }
 
-  // Clicking an irrigation status auto-switches to irrigation colouring.
-  function pickIrr(st) { setColorMode('irrigation'); setIrrFilter(st); }
-
   return (
     <div className="relative">
       {showFlagFilter && colorMode === 'flags' && (
@@ -265,13 +264,13 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
         )}
       </div>
 
-      {/* Irrigation status filters — ALWAYS visible when irrigation is on. */}
-      {irrigation && (
+      {/* Irrigation status filters — shown only AFTER you tap 💧 Irrigation. */}
+      {irrigation && colorMode === 'irrigation' && (
         <div className={`absolute ${showFlagFilter ? 'top-[5.5rem]' : 'top-12'} left-12 sm:left-14 z-[450] bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs flex-wrap`} {...stopMapGestures}>
-          <FilterBtn active={colorMode === 'irrigation' && irrFilter === 'all'} onClick={() => pickIrr('all')} color="text-emerald-700">💧 All pipes</FilterBtn>
-          <FilterBtn active={colorMode === 'irrigation' && irrFilter === 'dry'} onClick={() => pickIrr('dry')} color="text-red-700">🔴 Irrigate ({irrCount('dry')})</FilterBtn>
-          <FilterBtn active={colorMode === 'irrigation' && irrFilter === 'low'} onClick={() => pickIrr('low')} color="text-amber-700">🟠 Low ({irrCount('low')})</FilterBtn>
-          <FilterBtn active={colorMode === 'irrigation' && irrFilter === 'wet'} onClick={() => pickIrr('wet')} color="text-blue-700">🔵 Wet ({irrCount('wet')})</FilterBtn>
+          <FilterBtn active={irrFilter === 'all'} onClick={() => setIrrFilter('all')} color="text-emerald-700">💧 All pipes</FilterBtn>
+          <FilterBtn active={irrFilter === 'dry'} onClick={() => setIrrFilter('dry')} color="text-red-700">🔴 Irrigate ({irrCount('dry')})</FilterBtn>
+          <FilterBtn active={irrFilter === 'low'} onClick={() => setIrrFilter('low')} color="text-amber-700">🟠 Low ({irrCount('low')})</FilterBtn>
+          <FilterBtn active={irrFilter === 'wet'} onClick={() => setIrrFilter('wet')} color="text-blue-700">🔵 Wet ({irrCount('wet')})</FilterBtn>
         </div>
       )}
 

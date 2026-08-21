@@ -15,18 +15,12 @@ export const dynamic = 'force-dynamic';
 export default async function SubmissionsPage({ searchParams }) {
   const sp = (await searchParams) || {};
   let allSubmissions = [];
-  let rawSubmissions = [];
   let settings;
   let verifiedIds = new Set();
   let error = null;
   try {
-    // `allSubmissions` has admin corrections overlaid (used by every tab except
-    // Raw). `rawSubmissions` is the exact Kobo data with nothing overlaid — the
-    // Raw tab shows this so its count matches Kobo's true total. Both share the
-    // same underlying cached Kobo fetch, so this is not a second network round-trip.
-    [allSubmissions, rawSubmissions, settings, verifiedIds] = await Promise.all([
+    [allSubmissions, settings, verifiedIds] = await Promise.all([
       fetchSubmissions(),
-      fetchSubmissions({ applyCorrections: false }),
       getSettings(),
       getVerifiedIds(),
     ]);
@@ -53,12 +47,6 @@ export default async function SubmissionsPage({ searchParams }) {
   const canSeeFlags = isAdmin || (isGuest && currentUser?.show?.redFlags !== false) || currentUser?.showFlags === true;
 
   const scopedAll = await filterSubmissionsForUser(allSubmissions);   // corrections overlaid
-  const scopedRaw = await filterSubmissionsForUser(rawSubmissions);   // exact Kobo data
-  // Raw and corrected are the SAME rows (same _ids) — raw just has no overrides.
-  // The Raw tab shows each row's original values by looking it up here, so its
-  // count can never disagree with "All".
-  const rawById = new Map(scopedRaw.map((s) => [String(s._id), s]));
-  const toRaw = (s) => rawById.get(String(s._id)) || s;
 
   // Red-flag detection is admin-only. Surveyors don't see flag chips, red
   // colouring, or "this submission was flagged" warnings — quality review
@@ -95,8 +83,9 @@ export default async function SubmissionsPage({ searchParams }) {
 
   let filtered;
   if (flagFilter === 'raw') {
-    // Untouched forms only, shown exactly as Kobo stored them.
-    filtered = filtered0.filter(isRaw).map(toRaw);
+    // Untouched forms only — they have no admin overlay, so they ARE the exact
+    // Kobo data (no second fetch needed).
+    filtered = filtered0.filter(isRaw);
   } else {
     filtered = filtered0.filter((s) => {
       if (flagFilter === 'all') return true;             // everything, incl. dead
