@@ -100,11 +100,13 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
   const myMarkerRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [layer, setLayer] = useState('satellite');
+  // ONE filter drives everything: all | clean | flagged | duplicates | irrigation
   const [filterMode, setFilterMode] = useState('all');
   const [viewMode, setViewMode] = useState('pins');   // pins | heat
-  const [colorMode, setColorMode] = useState('flags'); // flags | irrigation
   const [irrFilter, setIrrFilter] = useState('all');
   const [locating, setLocating] = useState(false);
+  const [emptyFilter, setEmptyFilter] = useState(false);
+  const colorMode = filterMode === 'irrigation' ? 'irrigation' : 'flags';
 
   const flaggedCount = points.filter((p) => p.isFlagged).length;
   const cleanCount = points.length - flaggedCount;
@@ -163,14 +165,16 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
 
   function matchesFilter(item) {
     const p = item && item.point ? item.point : null;
-    if (colorMode === 'irrigation' && irrigation) {
-      if (irrFilter === 'all') return true;
-      return p ? p.irrStatus === irrFilter : true;
+    if (filterMode === 'irrigation') {
+      if (!p) return true;
+      return irrFilter === 'all' ? true : p.irrStatus === irrFilter;
     }
     if (filterMode === 'duplicates') return p ? !!p.isDuplicate : false;
+    if (!showFlagFilter) return true;                 // surveyors: every pin
     const isFlagged = p ? p.isFlagged : false;
-    if (!showFlagFilter) return true;
-    return filterMode === 'all' || (filterMode === 'flagged' && isFlagged) || (filterMode === 'clean' && !isFlagged);
+    if (filterMode === 'flagged') return isFlagged;   // ONLY red-flagged pins
+    if (filterMode === 'clean') return !isFlagged;
+    return true;                                       // 'all'
   }
 
   function applyView(mapArg) {
@@ -202,6 +206,7 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
       }
     }
 
+    setEmptyFilter(shownItems.length === 0 && all.length > 0);
     if (shownItems.length > 0) {
       try { map.fitBounds(L.featureGroup(shownItems.map((i) => i.marker)).getBounds().pad(0.25), { maxZoom: 13 }); } catch {}
     }
@@ -242,37 +247,37 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
 
   return (
     <div className="relative">
-      {showFlagFilter && colorMode === 'flags' && (
-        <div className="absolute top-2 left-12 sm:left-14 z-[450] bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs" {...stopMapGestures}>
-          <FilterBtn active={filterMode === 'all'} onClick={() => setFilterMode('all')}>All ({points.length})</FilterBtn>
-          <FilterBtn active={filterMode === 'clean'} onClick={() => setFilterMode('clean')} color="text-sky-700">● Clean ({cleanCount})</FilterBtn>
-          <FilterBtn active={filterMode === 'flagged'} onClick={() => setFilterMode('flagged')} color="text-red-700">🚩 ({flaggedCount})</FilterBtn>
-          {dupCount > 0 && <FilterBtn active={filterMode === 'duplicates'} onClick={() => setFilterMode('duplicates')} color="text-indigo-700">👯 ({dupCount})</FilterBtn>}
+      {/* ONE filter bar. "🚩 Flagged" actually FILTERS the map to red-flagged
+          pins (it's not just a colour). In irrigation mode it swaps to the
+          irrigation status filters with a back button. */}
+      {(showFlagFilter || irrigation) && (
+        <div className="absolute top-2 left-12 sm:left-14 right-14 z-[450] bg-white rounded-lg shadow flex flex-wrap p-0.5 text-[11px] sm:text-xs gap-0.5" {...stopMapGestures}>
+          {filterMode === 'irrigation' ? (
+            <>
+              <FilterBtn onClick={() => setFilterMode('all')}>‹ Back</FilterBtn>
+              <FilterBtn active={irrFilter === 'all'} onClick={() => setIrrFilter('all')} color="text-emerald-700">💧 All pipes</FilterBtn>
+              <FilterBtn active={irrFilter === 'dry'} onClick={() => setIrrFilter('dry')} color="text-red-700">🔴 Irrigate ({irrCount('dry')})</FilterBtn>
+              <FilterBtn active={irrFilter === 'low'} onClick={() => setIrrFilter('low')} color="text-amber-700">🟠 Low ({irrCount('low')})</FilterBtn>
+              <FilterBtn active={irrFilter === 'wet'} onClick={() => setIrrFilter('wet')} color="text-blue-700">🔵 Wet ({irrCount('wet')})</FilterBtn>
+            </>
+          ) : (
+            <>
+              {showFlagFilter && <>
+                <FilterBtn active={filterMode === 'all'} onClick={() => setFilterMode('all')}>All ({points.length})</FilterBtn>
+                <FilterBtn active={filterMode === 'clean'} onClick={() => setFilterMode('clean')} color="text-sky-700">● Clean ({cleanCount})</FilterBtn>
+                <FilterBtn active={filterMode === 'flagged'} onClick={() => setFilterMode('flagged')} color="text-red-700">🚩 Flagged ({flaggedCount})</FilterBtn>
+                {dupCount > 0 && <FilterBtn active={filterMode === 'duplicates'} onClick={() => setFilterMode('duplicates')} color="text-indigo-700">👯 Duplicate ({dupCount})</FilterBtn>}
+              </>}
+              {irrigation && <FilterBtn onClick={() => { setFilterMode('irrigation'); setIrrFilter('all'); }} color="text-emerald-700">💧 Irrigation</FilterBtn>}
+            </>
+          )}
         </div>
       )}
 
-      <div className={`absolute ${showFlagFilter ? 'top-12' : 'top-2'} left-12 sm:left-14 z-[450] flex gap-1 flex-wrap`} {...stopMapGestures}>
-        <div className="bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs">
-          <FilterBtn active={viewMode === 'pins'} onClick={() => setViewMode('pins')}>📍 Pins</FilterBtn>
-          <FilterBtn active={viewMode === 'heat'} onClick={() => setViewMode('heat')} color="text-orange-700">🔥 Heat</FilterBtn>
-        </div>
-        {irrigation && (
-          <div className="bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs">
-            <FilterBtn active={colorMode === 'flags'} onClick={() => setColorMode('flags')}>🚩 Flags</FilterBtn>
-            <FilterBtn active={colorMode === 'irrigation'} onClick={() => setColorMode('irrigation')} color="text-emerald-700">💧 Irrigation</FilterBtn>
-          </div>
-        )}
+      <div className="absolute top-12 left-12 sm:left-14 z-[450] bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs" {...stopMapGestures}>
+        <FilterBtn active={viewMode === 'pins'} onClick={() => setViewMode('pins')}>📍 Pins</FilterBtn>
+        <FilterBtn active={viewMode === 'heat'} onClick={() => setViewMode('heat')} color="text-orange-700">🔥 Heat</FilterBtn>
       </div>
-
-      {/* Irrigation status filters — shown only AFTER you tap 💧 Irrigation. */}
-      {irrigation && colorMode === 'irrigation' && (
-        <div className={`absolute ${showFlagFilter ? 'top-[5.5rem]' : 'top-12'} left-12 sm:left-14 z-[450] bg-white rounded-lg shadow flex p-0.5 text-[11px] sm:text-xs flex-wrap`} {...stopMapGestures}>
-          <FilterBtn active={irrFilter === 'all'} onClick={() => setIrrFilter('all')} color="text-emerald-700">💧 All pipes</FilterBtn>
-          <FilterBtn active={irrFilter === 'dry'} onClick={() => setIrrFilter('dry')} color="text-red-700">🔴 Irrigate ({irrCount('dry')})</FilterBtn>
-          <FilterBtn active={irrFilter === 'low'} onClick={() => setIrrFilter('low')} color="text-amber-700">🟠 Low ({irrCount('low')})</FilterBtn>
-          <FilterBtn active={irrFilter === 'wet'} onClick={() => setIrrFilter('wet')} color="text-blue-700">🔵 Wet ({irrCount('wet')})</FilterBtn>
-        </div>
-      )}
 
       <div className="absolute top-2 right-2 z-[450] bg-white rounded-lg shadow flex flex-col p-1 gap-0.5" {...stopMapGestures}>
         {Object.entries(TILE_LAYERS).map(([k, v]) => (
@@ -288,6 +293,11 @@ export default function MapView({ points = [], showFlagFilter = true, irrigation
         {locating ? <span className="animate-spin text-base">⏳</span> : '🎯'}
       </button>
 
+      {emptyFilter && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[440] bg-white/90 rounded-lg shadow px-4 py-2 text-sm text-slate-600 text-center pointer-events-none">
+          No pins match this filter{filterMode === 'flagged' ? ' — there are no red-flagged readings here.' : '.'}
+        </div>
+      )}
       <div ref={containerRef} style={{ height: '70vh', minHeight: 420, width: '100%' }} />
     </div>
   );
